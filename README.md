@@ -2,7 +2,7 @@
 
 A modern, responsive weather application built with vanilla JavaScript. Features real-time weather data, interactive forecasts, beautiful data visualizations, and air quality monitoring.
 
-**[View Live Demo](https://weather-dashboard-ayush.netlify.app/) | [GitHub](https://github.com/Ayush22042004/Weather-Dashboard)**
+**[View Live Demo](https://skypulse2.netlify.app/) | [GitHub](https://github.com/Ayush22042004/Weather-Dashboard)**
 
 ---
 
