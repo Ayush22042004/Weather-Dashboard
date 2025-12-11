@@ -287,7 +287,7 @@ MIT License - Feel free to use for personal or commercial projects.
 
 ## 👨‍💻 Author
 
-Built by a 21-year-old engineer as a full-featured weather application.
+Built by a 21-year-old engineering student as a full-featured weather application.
 
 **[GitHub](https://github.com/Ayush22042004) | [Portfolio](#)**
 
