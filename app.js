@@ -5,20 +5,6 @@ const API_CONFIG = {
     UNITS: 'metric'
 };
 
-// State Management
-const state = {
-    currentLocation: null,
-    currentWeather: null,
-    forecast: null,
-    hourlyData: [],
-    chartInstances: { temperature: null, humidity: null },
-    isLoading: false,
-    currentTheme: 'auto',
-    currentTimeOfDay: TIMES.NIGHT,
-    sunrise: null,
-    sunset: null
-};
-
 // Theme Management System
 const THEMES = {
     SPRING: 'spring',
@@ -32,6 +18,21 @@ const THEMES = {
 const TIMES = {
     DAY: 'day',
     NIGHT: 'night'
+};
+
+// State Management
+const state = {
+    currentLocation: null,
+    currentWeather: null,
+    forecast: null,
+    hourlyData: [],
+    chartInstances: { temperature: null, humidity: null },
+    isLoading: false,
+    currentTheme: 'auto',
+    currentTimeOfDay: TIMES.NIGHT,
+    forceTimeOfDay: null, // null = auto, otherwise day or night
+    sunrise: null,
+    sunset: null
 };
 
 const themeManager = {
@@ -101,6 +102,7 @@ const elements = {
     searchBtn: document.getElementById('searchBtn'),
     locationBtn: document.getElementById('locationBtn'),
     themeToggle: document.getElementById('themeToggle'),
+    daylightToggle: document.getElementById('daylightToggle'),
     loadingSpinner: document.getElementById('loadingSpinner'),
     cityName: document.getElementById('cityName'),
     currentDate: document.getElementById('currentDate'),
@@ -136,6 +138,7 @@ function setupEventListeners() {
     elements.searchInput.addEventListener('input', handleSearchInput);
     elements.locationBtn.addEventListener('click', handleLocationClick);
     elements.themeToggle.addEventListener('click', toggleTheme);
+    elements.daylightToggle.addEventListener('click', toggleDayNightMode);
     
     // Close suggestions when clicking outside
     document.addEventListener('click', (e) => {
@@ -153,6 +156,25 @@ function toggleTheme() {
     const nextTheme = themes[nextIndex];
     
     themeManager.applyTheme(nextTheme);
+}
+
+// Day/Night Toggle Handler
+function toggleDayNightMode() {
+    // Toggle between day and night
+    state.forceTimeOfDay = state.forceTimeOfDay === TIMES.DAY ? TIMES.NIGHT : TIMES.DAY;
+    
+    // Update theme with forced time of day
+    if (state.currentTheme !== THEMES.DARK && state.currentTheme !== THEMES.LIGHT) {
+        themeManager.applyTheme(state.currentTheme, state.forceTimeOfDay);
+    }
+    
+    updateDayNightToggleIcon();
+    showNotification(`Switched to ${state.forceTimeOfDay} mode 🌗`);
+}
+
+function updateDayNightToggleIcon() {
+    elements.daylightToggle.textContent = state.forceTimeOfDay === TIMES.DAY ? '☀️' : '🌙';
+    elements.daylightToggle.classList.toggle('night-mode', state.forceTimeOfDay === TIMES.NIGHT);
 }
 
 function updateThemeToggleIcon(theme, timeOfDay = null) {
@@ -329,8 +351,9 @@ async function fetchWeatherData(lat, lon) {
         // Auto-apply theme based on location's season and time of day if theme is set to 'auto'
         if (state.currentTheme === 'auto') {
             const seasonTheme = themeManager.getAutoTheme(lat);
-            const timeOfDay = themeManager.getCurrentTimeOfDay(state.sunrise, state.sunset);
+            const timeOfDay = state.forceTimeOfDay || themeManager.getCurrentTimeOfDay(state.sunrise, state.sunset);
             themeManager.applyTheme(seasonTheme, timeOfDay);
+            state.currentTimeOfDay = timeOfDay;
         }
 
         // Fetch forecast (includes hourly and daily)
@@ -803,15 +826,16 @@ function startDayNightMonitoring() {
         clearInterval(dayNightMonitoringInterval);
     }
     
-    // Check for day/night transition every minute
+    // Check for day/night transition every minute (only if not forced)
     dayNightMonitoringInterval = setInterval(() => {
-        if (state.sunrise && state.sunset && state.currentTheme === 'auto') {
+        if (state.sunrise && state.sunset && state.currentTheme === 'auto' && !state.forceTimeOfDay) {
             const currentTimeOfDay = themeManager.getCurrentTimeOfDay(state.sunrise, state.sunset);
             
             // If the time of day has changed, update the theme
             if (currentTimeOfDay !== state.currentTimeOfDay) {
                 const seasonTheme = themeManager.getAutoTheme(state.currentLocation.lat);
                 themeManager.applyTheme(seasonTheme, currentTimeOfDay);
+                state.currentTimeOfDay = currentTimeOfDay;
                 showNotification(`Switched to ${currentTimeOfDay} theme ✨`);
             }
         }
