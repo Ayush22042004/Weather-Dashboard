@@ -12,7 +12,87 @@ const state = {
     forecast: null,
     hourlyData: [],
     chartInstances: { temperature: null, humidity: null },
-    isLoading: false
+    isLoading: false,
+    currentTheme: 'auto',
+    currentTimeOfDay: TIMES.NIGHT,
+    sunrise: null,
+    sunset: null
+};
+
+// Theme Management System
+const THEMES = {
+    SPRING: 'spring',
+    SUMMER: 'summer',
+    AUTUMN: 'autumn',
+    WINTER: 'winter',
+    DARK: 'dark',
+    LIGHT: 'light'
+};
+
+const TIMES = {
+    DAY: 'day',
+    NIGHT: 'night'
+};
+
+const themeManager = {
+    getCurrentSeason(latitude) {
+        const month = new Date().getMonth();
+        
+        // Northern hemisphere seasons (using latitude to adjust)
+        if (latitude > 0) {
+            if (month >= 2 && month <= 4) return THEMES.SPRING;
+            if (month >= 5 && month <= 7) return THEMES.SUMMER;
+            if (month >= 8 && month <= 10) return THEMES.AUTUMN;
+            return THEMES.WINTER;
+        } else {
+            // Southern hemisphere seasons (reversed)
+            if (month >= 2 && month <= 4) return THEMES.AUTUMN;
+            if (month >= 5 && month <= 7) return THEMES.WINTER;
+            if (month >= 8 && month <= 10) return THEMES.SPRING;
+            return THEMES.SUMMER;
+        }
+    },
+    
+    isDayTime(sunrise, sunset) {
+        const now = new Date().getTime() / 1000; // Current time in seconds
+        return now >= sunrise && now < sunset;
+    },
+    
+    getCurrentTimeOfDay(sunrise, sunset) {
+        return this.isDayTime(sunrise, sunset) ? TIMES.DAY : TIMES.NIGHT;
+    },
+    
+    applyTheme(theme, timeOfDay = null) {
+        document.body.className = '';
+        let finalTheme = theme;
+        
+        // If a time of day is specified, apply day/night variant
+        if (timeOfDay && (theme === THEMES.SPRING || theme === THEMES.SUMMER || theme === THEMES.AUTUMN || theme === THEMES.WINTER)) {
+            finalTheme = `${theme}-${timeOfDay}`;
+        }
+        
+        document.body.classList.add(`theme-${finalTheme}`);
+        state.currentTheme = theme;
+        state.currentTimeOfDay = timeOfDay || TIMES.NIGHT;
+        localStorage.setItem('theme', theme);
+        updateThemeToggleIcon(theme, timeOfDay);
+    },
+    
+    getAutoTheme(latitude) {
+        const season = this.getCurrentSeason(latitude);
+        return season;
+    },
+    
+    initializeTheme() {
+        const savedTheme = localStorage.getItem('theme') || 'auto';
+        state.currentTheme = savedTheme;
+        
+        if (savedTheme === 'auto' || savedTheme === 'light' || savedTheme === 'dark') {
+            this.applyTheme(savedTheme);
+        } else {
+            this.applyTheme(savedTheme);
+        }
+    }
 };
 
 // DOM Elements
@@ -20,6 +100,7 @@ const elements = {
     searchInput: document.getElementById('searchInput'),
     searchBtn: document.getElementById('searchBtn'),
     locationBtn: document.getElementById('locationBtn'),
+    themeToggle: document.getElementById('themeToggle'),
     loadingSpinner: document.getElementById('loadingSpinner'),
     cityName: document.getElementById('cityName'),
     currentDate: document.getElementById('currentDate'),
@@ -41,6 +122,7 @@ const elements = {
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', () => {
+    themeManager.initializeTheme();
     setupEventListeners();
     loadDefaultLocation();
 });
@@ -53,6 +135,7 @@ function setupEventListeners() {
     });
     elements.searchInput.addEventListener('input', handleSearchInput);
     elements.locationBtn.addEventListener('click', handleLocationClick);
+    elements.themeToggle.addEventListener('click', toggleTheme);
     
     // Close suggestions when clicking outside
     document.addEventListener('click', (e) => {
@@ -60,6 +143,38 @@ function setupEventListeners() {
             elements.suggestionsList.classList.remove('active');
         }
     });
+}
+
+// Theme Toggle Handler
+function toggleTheme() {
+    const themes = Object.values(THEMES);
+    const currentIndex = themes.indexOf(state.currentTheme);
+    const nextIndex = (currentIndex + 1) % themes.length;
+    const nextTheme = themes[nextIndex];
+    
+    themeManager.applyTheme(nextTheme);
+}
+
+function updateThemeToggleIcon(theme, timeOfDay = null) {
+    const icons = {
+        [THEMES.SPRING]: { day: '🌸', night: '🌙' },
+        [THEMES.SUMMER]: { day: '☀️', night: '🌙' },
+        [THEMES.AUTUMN]: { day: '🍂', night: '🌙' },
+        [THEMES.WINTER]: { day: '❄️', night: '🌙' },
+        [THEMES.DARK]: { day: '🌙', night: '🌙' },
+        [THEMES.LIGHT]: { day: '🌞', night: '🌞' }
+    };
+    
+    const icon = icons[theme];
+    if (icon) {
+        if (timeOfDay) {
+            elements.themeToggle.textContent = icon[timeOfDay];
+        } else {
+            elements.themeToggle.textContent = icon.night || '🌙';
+        }
+    } else {
+        elements.themeToggle.textContent = '🌙';
+    }
 }
 
 // Search Handler
@@ -206,6 +321,17 @@ async function fetchWeatherData(lat, lon) {
             throw new Error(`Current weather API error: ${currentResponse.status} ${currentResponse.statusText}`);
         }
         state.currentWeather = await currentResponse.json();
+        
+        // Capture sunrise and sunset times
+        state.sunrise = state.currentWeather.sys.sunrise;
+        state.sunset = state.currentWeather.sys.sunset;
+        
+        // Auto-apply theme based on location's season and time of day if theme is set to 'auto'
+        if (state.currentTheme === 'auto') {
+            const seasonTheme = themeManager.getAutoTheme(lat);
+            const timeOfDay = themeManager.getCurrentTimeOfDay(state.sunrise, state.sunset);
+            themeManager.applyTheme(seasonTheme, timeOfDay);
+        }
 
         // Fetch forecast (includes hourly and daily)
         const forecastUrl = `${API_CONFIG.OPENWEATHER_BASE}/data/2.5/forecast?lat=${lat}&lon=${lon}&units=${API_CONFIG.UNITS}&appid=${API_CONFIG.OPENWEATHER_KEY}`;
@@ -230,6 +356,9 @@ async function fetchWeatherData(lat, lon) {
         updateAirQuality(aqData);
         updateCharts();
         updateLastUpdated();
+        
+        // Start monitoring for day/night transition
+        startDayNightMonitoring();
 
     } catch (error) {
         console.error('Weather data fetch error:', error);
@@ -663,6 +792,56 @@ function updateLastUpdated() {
         minute: '2-digit',
         second: '2-digit'
     });
+}
+
+// Day/Night Monitoring
+let dayNightMonitoringInterval = null;
+
+function startDayNightMonitoring() {
+    // Clear any existing interval
+    if (dayNightMonitoringInterval) {
+        clearInterval(dayNightMonitoringInterval);
+    }
+    
+    // Check for day/night transition every minute
+    dayNightMonitoringInterval = setInterval(() => {
+        if (state.sunrise && state.sunset && state.currentTheme === 'auto') {
+            const currentTimeOfDay = themeManager.getCurrentTimeOfDay(state.sunrise, state.sunset);
+            
+            // If the time of day has changed, update the theme
+            if (currentTimeOfDay !== state.currentTimeOfDay) {
+                const seasonTheme = themeManager.getAutoTheme(state.currentLocation.lat);
+                themeManager.applyTheme(seasonTheme, currentTimeOfDay);
+                showNotification(`Switched to ${currentTimeOfDay} theme ✨`);
+            }
+        }
+    }, 60000); // Check every minute
+}
+
+function showNotification(message) {
+    const notifDiv = document.createElement('div');
+    notifDiv.style.cssText = `
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: linear-gradient(135deg, var(--primary), var(--accent));
+        color: white;
+        padding: 15px 20px;
+        border-radius: 10px;
+        z-index: 998;
+        animation: slideIn 0.3s ease;
+        max-width: 300px;
+        font-size: 14px;
+        font-weight: 500;
+        box-shadow: 0 8px 24px rgba(0, 212, 255, 0.3);
+    `;
+    notifDiv.textContent = message;
+    document.body.appendChild(notifDiv);
+
+    setTimeout(() => {
+        notifDiv.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notifDiv.remove(), 300);
+    }, 3000);
 }
 
 // Utility Functions

@@ -12,6 +12,102 @@
     --warning: #ffd43b;
     --danger: #ff6b6b;
     --info: #74c0fc;
+    --theme-mode: 'auto';
+}
+
+/* Spring Theme - Night */
+body.theme-spring-night {
+    --primary: #00d4ff;
+    --accent: #4ecdc4;
+    --dark-bg: #0f1419;
+    --card-bg: #1a1f2e;
+    --secondary: #ff6b6b;
+}
+
+/* Spring Theme - Day */
+body.theme-spring-day {
+    --primary: #00d9ff;
+    --accent: #06d6d6;
+    --dark-bg: #e8f8f9;
+    --card-bg: #ffffff;
+    --text-primary: #0a0e1a;
+    --text-secondary: #4a5568;
+    --border-color: #cce7e9;
+}
+
+/* Summer Theme - Night */
+body.theme-summer-night {
+    --primary: #ff6b35;
+    --accent: #f7931e;
+    --dark-bg: #1a1a2e;
+    --card-bg: #16213e;
+    --secondary: #ffc300;
+}
+
+/* Summer Theme - Day */
+body.theme-summer-day {
+    --primary: #ff8c42;
+    --accent: #ffa500;
+    --dark-bg: #fff8e7;
+    --card-bg: #fffbf0;
+    --text-primary: #1a1410;
+    --text-secondary: #5d4e37;
+    --border-color: #ffe4b5;
+}
+
+/* Autumn Theme - Night */
+body.theme-autumn-night {
+    --primary: #d4691d;
+    --accent: #d97706;
+    --dark-bg: #1a1a1a;
+    --card-bg: #2d2d2d;
+    --secondary: #ea580c;
+}
+
+/* Autumn Theme - Day */
+body.theme-autumn-day {
+    --primary: #d97706;
+    --accent: #ea580c;
+    --dark-bg: #fef3e2;
+    --card-bg: #fef9f3;
+    --text-primary: #78350f;
+    --text-secondary: #92400e;
+    --border-color: #fed7aa;
+}
+
+/* Winter Theme - Night */
+body.theme-winter-night {
+    --primary: #00b4ff;
+    --accent: #4dd0e1;
+    --dark-bg: #0a0e27;
+    --card-bg: #1a2332;
+    --secondary: #81d4fa;
+}
+
+/* Winter Theme - Day */
+body.theme-winter-day {
+    --primary: #0ea5e9;
+    --accent: #06b6d4;
+    --dark-bg: #f0f9ff;
+    --card-bg: #ffffff;
+    --text-primary: #0c2d6b;
+    --text-secondary: #1e40af;
+    --border-color: #bae6fd;
+}
+
+/* Dark Mode Toggle */
+body.dark-mode {
+    --dark-bg: #000000;
+    --card-bg: #0f0f0f;
+}
+
+/* Light Mode Toggle */
+body.light-mode {
+    --dark-bg: #f5f5f5;
+    --card-bg: #ffffff;
+    --text-primary: #1a1a1a;
+    --text-secondary: #666666;
+    --border-color: #cccccc;
 }
 
 * {
@@ -22,15 +118,18 @@
 
 html {
     scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-    background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+    background: linear-gradient(135deg, var(--dark-bg) 0%, var(--card-bg) 100%);
     color: var(--text-primary);
     line-height: 1.6;
     overflow-x: hidden;
     min-height: 100vh;
+    transition: all 0.3s ease;
 }
 
 .container {
@@ -849,17 +948,13 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-    .header-content {
-        flex-direction: column;
-        gap: 15px;
-    }
-
     .header h1 {
         font-size: 22px;
     }
 
     .search-box {
         max-width: 100%;
+        min-width: 100%;
     }
 
     .weather-card {
@@ -892,6 +987,7 @@ body {
 
     .hourly-card {
         padding: 15px;
+        min-height: 120px;
     }
 
     .daily-forecast {
@@ -907,11 +1003,22 @@ body {
     }
 }
 
-@media (max-width: 480px) {
-    .container {
-        padding: 0 12px;
+@media (max-width: 600px) {
+    .search-box {
+        flex-direction: column;
+        width: 100%;
     }
 
+    .search-input-wrapper {
+        width: 100%;
+    }
+
+    .search-box input {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
     .header h1 {
         font-size: 18px;
     }
@@ -919,6 +1026,9 @@ body {
     .search-box input,
     .search-box button {
         font-size: 12px;
+        padding: 12px 14px !important;
+        min-height: 44px;
+        min-width: 44px;
     }
 
     .weather-card {
@@ -926,7 +1036,7 @@ body {
     }
 
     .location-info h2 {
-        font-size: 24px;
+        font-size: 20px;
     }
 
     .temperature {
@@ -940,14 +1050,25 @@ body {
 
     .detail-item {
         padding: 12px;
+        font-size: 14px;
+    }
+
+    .detail-item .label {
+        font-size: 11px;
+    }
+
+    .detail-item .value {
+        font-size: 16px;
     }
 
     .hourly-forecast {
         grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
     }
 
     .hourly-card {
-        padding: 12px;
+        padding: 12px 8px;
+        min-height: auto;
     }
 
     .hourly-time {
@@ -959,12 +1080,52 @@ body {
         height: 40px;
     }
 
+    .hourly-temp {
+        font-size: 16px;
+    }
+
     .daily-forecast {
         grid-template-columns: 1fr;
     }
 
+    .daily-card {
+        padding: 16px;
+    }
+
     .aq-cards {
         grid-template-columns: 1fr;
+    }
+
+    .forecast-section h3 {
+        font-size: 18px;
+        margin-bottom: 15px;
+    }
+
+    .chart-container {
+        padding: 20px;
+    }
+}
+
+@media (max-width: 380px) {
+    .header h1 {
+        font-size: 16px;
+    }
+
+    .header h1 i {
+        font-size: 22px;
+    }
+
+    .weather-icon-large {
+        width: 80px;
+        height: 80px;
+    }
+
+    .temperature {
+        font-size: 32px;
+    }
+
+    .hourly-forecast {
+        grid-template-columns: repeat(3, 1fr);
     }
 }
 
@@ -982,4 +1143,44 @@ body {
 
 .fade-in {
     animation: fadeIn 0.5s ease-out;
+}
+
+/* Theme Toggle Button */
+.theme-toggle {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0, 212, 255, 0.4);
+    transition: all 0.3s ease;
+    z-index: 99;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.theme-toggle:hover {
+    transform: scale(1.15);
+    box-shadow: 0 12px 32px rgba(0, 212, 255, 0.6);
+}
+
+.theme-toggle:active {
+    transform: scale(0.95);
+}
+
+@media (max-width: 480px) {
+    .theme-toggle {
+        width: 50px;
+        height: 50px;
+        bottom: 20px;
+        right: 20px;
+        font-size: 18px;
+    }
 }
