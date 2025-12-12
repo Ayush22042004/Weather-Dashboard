@@ -6,7 +6,7 @@ const API_CONFIG = {
     GEOCODING_BASE: 'https://geocoding-api.open-meteo.com/v1',
     OPENWEATHER_BASE: 'https://api.openweathermap.org/data/2.5',
     // Store actual key in backend environment variable, not client code
-    OPENWEATHER_API_KEY: '', // To be fetched from backend
+    OPENWEATHER_API_KEY: '35102437e50d37262084332662179159', // To be fetched from backend
     UNITS: 'metric'
 };
 
@@ -181,8 +181,8 @@ async function handleSearchInput(e) {
 // Fetch City Suggestions
 async function fetchCitySuggestions(query) {
     try {
-        // Use backend API for search
-        const response = await fetch(`http://localhost:3000/api/geocode?query=${encodeURIComponent(query)}`);
+        // Use Open-Meteo Geocoding API (free, no key required)
+        const response = await fetch(`${API_CONFIG.GEOCODING_BASE}/search?name=${encodeURIComponent(query)}&count=10&language=en`);
         
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
@@ -240,13 +240,13 @@ async function handleLocationClick() {
                     const { latitude, longitude } = position.coords;
                     console.log('Got location:', latitude, longitude);
                     
-                    // Try to get location name from reverse geocoding using backend
+                    // Try to get location name from reverse geocoding using Open-Meteo
                     let locationName = 'Current Location';
                     let countryCode = '';
                     
                     try {
-                        // Use backend API for reverse geocoding
-                        const response = await fetch(`http://localhost:3000/api/reverse-geocode?lat=${latitude}&lon=${longitude}`, { signal: AbortSignal.timeout(8000) });
+                        // Use Open-Meteo reverse geocoding (free, no key required)
+                        const response = await fetch(`${API_CONFIG.GEOCODING_BASE}/reverse?latitude=${latitude}&longitude=${longitude}&language=en`);
                         
                         if (response.ok) {
                             const data = await response.json();
@@ -254,7 +254,6 @@ async function handleLocationClick() {
                             if (data.results && data.results.length > 0) {
                                 const result = data.results[0];
                                 console.log('Result object keys:', Object.keys(result));
-                                console.log('Result name field:', result.name);
                                 
                                 // Prioritize: name field (which is the city) > admin1 > admin2
                                 locationName = result.name || 
@@ -273,7 +272,7 @@ async function handleLocationClick() {
                         }
                     } catch (geoError) {
                         console.warn('Reverse geocoding failed:', geoError.message);
-                        // Fallback: if backend is not available, still work with coordinates
+                        // Fallback: if API is not available, still work with coordinates
                     }
                     
                     // Set the location in state BEFORE fetching weather
@@ -313,8 +312,8 @@ async function handleLocationClick() {
 // Geocode Location
 async function geocodeLocation(query) {
     try {
-        // Use backend API for geocoding
-        const response = await fetch(`http://localhost:3000/api/geocode?query=${encodeURIComponent(query)}`);
+        // Use Open-Meteo Geocoding API (free, no key required)
+        const response = await fetch(`${API_CONFIG.GEOCODING_BASE}/search?name=${encodeURIComponent(query)}&count=1&language=en`);
         if (!response.ok) {
             throw new Error(`Geocoding API error: ${response.status} ${response.statusText}`);
         }
@@ -343,29 +342,27 @@ async function fetchWeatherData(lat, lon) {
     try {
         showLoadingSpinner(true);
 
-        // Use backend API endpoints for secure API calls
-        const apiBase = 'http://localhost:3000/api'; // Backend server
-        
-        // Fetch current weather, forecast, and air quality from backend
-        const [weatherResponse, forecastResponse, airQualityResponse] = await Promise.all([
-            fetch(`${apiBase}/weather?lat=${lat}&lon=${lon}`),
-            fetch(`${apiBase}/forecast?lat=${lat}&lon=${lon}`),
-            fetch(`${apiBase}/air-quality?lat=${lat}&lon=${lon}`)
-        ]);
-        
-        if (!weatherResponse.ok) {
-            throw new Error(`Weather API error: ${weatherResponse.status}`);
+        // Fetch current weather from OpenWeatherMap
+        const currentUrl = `${API_CONFIG.OPENWEATHER_BASE}/weather?lat=${lat}&lon=${lon}&units=${API_CONFIG.UNITS}&appid=${API_CONFIG.OPENWEATHER_API_KEY}`;
+        const currentResponse = await fetch(currentUrl);
+        if (!currentResponse.ok) {
+            throw new Error(`Current weather API error: ${currentResponse.status}`);
         }
-        
+        const weatherData = await currentResponse.json();
+
+        // Fetch forecast from Open-Meteo (free, no key required)
+        const forecastUrl = `${API_CONFIG.OPENMETEO_BASE}/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto`;
+        const forecastResponse = await fetch(forecastUrl);
         if (!forecastResponse.ok) {
             throw new Error(`Forecast API error: ${forecastResponse.status}`);
         }
-        
-        const weatherData = await weatherResponse.json();
         const forecastData = await forecastResponse.json();
-        const airQualityData = airQualityResponse.ok ? await airQualityResponse.json() : null;
 
-        
+        // Fetch air quality from OpenWeatherMap
+        const aqUrl = `${API_CONFIG.OPENWEATHER_BASE}/air_pollution?lat=${lat}&lon=${lon}&appid=${API_CONFIG.OPENWEATHER_API_KEY}`;
+        const aqResponse = await fetch(aqUrl);
+        const aqData = aqResponse.ok ? await aqResponse.json() : null;
+
         // Get location name - use stored location if available
         let locationName = state.currentLocation?.name || weatherData.name || 'Current Location';
         let countryCode = state.currentLocation?.country || weatherData.sys?.country || '';
@@ -411,75 +408,51 @@ async function fetchWeatherData(lat, lon) {
         const autoTheme = isDay ? THEMES.DAY : THEMES.NIGHT;
         themeManager.applyTheme(autoTheme);
 
-        // Process hourly forecast data from OpenWeatherMap (5-day/3-hour forecast)
+        // Process hourly data from Open-Meteo
         state.hourlyData = [];
-        const forecastList = forecastData.list || [];
-        for (let i = 0; i < Math.min(8, forecastList.length); i++) {
-            const item = forecastList[i];
+        for (let i = 0; i < Math.min(8, forecastData.hourly.time.length); i++) {
             state.hourlyData.push({
-                dt: item.dt,
+                dt: new Date(forecastData.hourly.time[i]).getTime() / 1000,
                 main: {
-                    temp: item.main.temp,
-                    humidity: item.main.humidity,
-                    feels_like: item.main.feels_like
+                    temp: Math.round(forecastData.hourly.temperature_2m[i] * 10) / 10,
+                    humidity: Math.round(forecastData.hourly.relative_humidity_2m[i]),
+                    feels_like: Math.round(forecastData.hourly.temperature_2m[i] * 10) / 10
                 },
                 weather: [{
-                    main: item.weather[0].main,
-                    icon: item.weather[0].icon
+                    main: getWeatherDescription(forecastData.hourly.weather_code[i]),
+                    icon: getWeatherIcon(forecastData.hourly.weather_code[i])
                 }],
-                rain: item.rain ? item.rain : null
+                rain: forecastData.hourly.precipitation[i] ? { '3h': forecastData.hourly.precipitation[i] } : null
             });
         }
 
-        // Process daily forecast (group by day from the 5-day forecast)
+        // Process daily forecast from Open-Meteo
         state.forecast = {
             list: []
         };
-        const dailyData = {};
-        
-        // Group forecast data by day
-        for (const item of forecastList) {
-            const date = new Date(item.dt * 1000);
-            const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
-            
-            if (!dailyData[dateKey]) {
-                dailyData[dateKey] = {
-                    dt: item.dt,
-                    temps: [item.main.temp],
-                    weather: item.weather[0],
-                    rain: item.rain
-                };
-            } else {
-                dailyData[dateKey].temps.push(item.main.temp);
-            }
-        }
-        
-        // Create 5-day forecast from grouped data
-        Object.keys(dailyData).slice(0, 5).forEach(dateKey => {
-            const dayData = dailyData[dateKey];
-            const temps = dayData.temps;
+        for (let i = 0; i < Math.min(5, forecastData.daily.time.length); i++) {
             state.forecast.list.push({
-                dt: dayData.dt,
+                dt: new Date(forecastData.daily.time[i]).getTime() / 1000,
                 main: {
-                    temp_max: Math.max(...temps),
-                    temp_min: Math.min(...temps),
-                    temp: (Math.max(...temps) + Math.min(...temps)) / 2
+                    temp_max: Math.round(forecastData.daily.temperature_2m_max[i] * 10) / 10,
+                    temp_min: Math.round(forecastData.daily.temperature_2m_min[i] * 10) / 10,
+                    temp: (forecastData.daily.temperature_2m_max[i] + forecastData.daily.temperature_2m_min[i]) / 2
                 },
                 weather: [{
-                    main: dayData.weather.main,
-                    icon: dayData.weather.icon
+                    main: getWeatherDescription(forecastData.daily.weather_code[i]),
+                    icon: getWeatherIcon(forecastData.daily.weather_code[i])
                 }],
-                rain: dayData.rain ? dayData.rain : null
+                rain: forecastData.daily.precipitation_probability_max[i] > 0 ? { '3h': forecastData.daily.precipitation_probability_max[i] / 100 } : null
             });
-        });
+        }
 
         // Update UI
         updateCurrentWeather();
         updateHourlyForecast();
         updateDailyForecast();
         updateCharts();
-        // Air quality data from backend
-        updateAirQuality(airQualityData);
+        // Air quality data from OpenWeatherMap
+        updateAirQuality(aqData);
         updateLastUpdated();
         
         // Start monitoring for day/night transition
@@ -487,7 +460,7 @@ async function fetchWeatherData(lat, lon) {
 
     } catch (error) {
         console.error('Weather data fetch error:', error);
-        showError('Failed to fetch weather data. Please check your connection and try again.');
+        showError('Failed to fetch weather data: ' + error.message);
     } finally {
         showLoadingSpinner(false);
     }
