@@ -420,6 +420,9 @@ async function fetchWeatherData(lat, lon) {
         state.sunrise = state.currentWeather.sys.sunrise;
         state.sunset = state.currentWeather.sys.sunset;
         
+        // Save current location to localStorage for persistence on refresh
+        localStorage.setItem('lastLocation', JSON.stringify(state.currentLocation));
+        
         // Auto-apply theme based on actual sunrise/sunset time
         const isDay = isDayTime(state.sunrise, state.sunset);
         const autoTheme = isDay ? THEMES.DAY : THEMES.NIGHT;
@@ -1410,9 +1413,25 @@ function updateHumidityChart(data, currentHourIndex) {
 // Load Default Location (Delhi)
 async function loadDefaultLocation() {
     try {
-        // Delhi coordinates
-        state.currentLocation = { lat: 28.7041, lon: 77.1025, name: 'Delhi', country: 'India' };
-        await fetchWeatherData(28.7041, 77.1025);
+        // Check if there's a saved last location in localStorage
+        const savedLocation = localStorage.getItem('lastLocation');
+        
+        if (savedLocation) {
+            try {
+                const location = JSON.parse(savedLocation);
+                state.currentLocation = location;
+                await fetchWeatherData(location.lat, location.lon);
+            } catch (error) {
+                console.error('Failed to load saved location:', error);
+                // Fallback to Delhi if saved location fails
+                state.currentLocation = { lat: 28.7041, lon: 77.1025, name: 'Delhi', country: 'India' };
+                await fetchWeatherData(28.7041, 77.1025);
+            }
+        } else {
+            // Default to Delhi if no saved location
+            state.currentLocation = { lat: 28.7041, lon: 77.1025, name: 'Delhi', country: 'India' };
+            await fetchWeatherData(28.7041, 77.1025);
+        }
     } catch (error) {
         console.error('Failed to load default location:', error);
     }
