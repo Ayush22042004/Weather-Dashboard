@@ -565,10 +565,18 @@ body.theme-day {
     font-size: 32px;
     margin-bottom: 8px;
     color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.location-info h2 i {
+    font-size: 28px;
+    filter: drop-shadow(0 0 8px rgba(0, 212, 255, 0.3));
 }
 
 .date-time {
-    color: #00d4ff;
+    color: #b0b0b0;
     font-size: 14px;
     font-weight: 500;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);

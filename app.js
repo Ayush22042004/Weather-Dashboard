@@ -735,8 +735,12 @@ function updateCurrentWeather() {
         timeString = state.currentHourTime;
     }
     
-    // Display city name with time on the same line
-    elements.cityName.textContent = `${data.name}, ${data.sys.country || 'World'} ${timeString}`;
+    // Determine if it's day or night
+    const isDay = isDayTime(state.sunrise, state.sunset);
+    const themeIcon = isDay ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    
+    // Display city name with theme icon and time
+    elements.cityName.innerHTML = `${themeIcon} ${data.name}, ${data.sys.country || 'World'} ${timeString}`;
     elements.cityName.style.color = '#00d4ff';
     
     elements.temperature.textContent = `${Math.round(data.main.temp)}°C`;
