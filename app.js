@@ -31,7 +31,9 @@ const state = {
     isLoading: false,
     currentTheme: 'night',
     sunrise: null,
-    sunset: null
+    sunset: null,
+    fullDayHourlyIndex: 0, // Track position in full day hourly forecast
+    searchHistory: JSON.parse(localStorage.getItem('searchHistory')) || []
 };
 
 const themeManager = {
@@ -90,6 +92,18 @@ function setupEventListeners() {
     elements.searchInput.addEventListener('input', handleSearchInput);
     elements.locationBtn.addEventListener('click', handleLocationClick);
     elements.daylightToggle.addEventListener('click', toggleDayNightMode);
+    
+    // Full day hourly forecast navigation
+    const prevBtn = document.getElementById('prevHourBtn');
+    const nextBtn = document.getElementById('nextHourBtn');
+    if (prevBtn) prevBtn.addEventListener('click', () => scrollFullDayHourly(-6));
+    if (nextBtn) nextBtn.addEventListener('click', () => scrollFullDayHourly(6));
+    
+    // Keyboard arrow navigation
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') scrollFullDayHourly(-6);
+        if (e.key === 'ArrowRight') scrollFullDayHourly(6);
+    });
     
     // Close suggestions when clicking outside
     document.addEventListener('click', (e) => {
@@ -351,7 +365,7 @@ async function fetchWeatherData(lat, lon) {
         const weatherData = await currentResponse.json();
 
         // Fetch forecast from Open-Meteo (free, no key required)
-        const forecastUrl = `${API_CONFIG.OPENMETEO_BASE}/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto`;
+        const forecastUrl = `${API_CONFIG.OPENMETEO_BASE}/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&current=temperature_2m`;
         const forecastResponse = await fetch(forecastUrl);
         if (!forecastResponse.ok) {
             throw new Error(`Forecast API error: ${forecastResponse.status}`);
@@ -399,6 +413,9 @@ async function fetchWeatherData(lat, lon) {
             }
         };
         
+        // Store the current time timestamp for display
+        state.weatherTimestamp = weatherData.dt;
+        
         // Capture sunrise and sunset times
         state.sunrise = state.currentWeather.sys.sunrise;
         state.sunset = state.currentWeather.sys.sunset;
@@ -408,10 +425,80 @@ async function fetchWeatherData(lat, lon) {
         const autoTheme = isDay ? THEMES.DAY : THEMES.NIGHT;
         themeManager.applyTheme(autoTheme);
 
-        // Process hourly data from Open-Meteo
+        // Process hourly data from Open-Meteo - show next 8 hours from current time in location's timezone
         state.hourlyData = [];
-        for (let i = 0; i < Math.min(8, forecastData.hourly.time.length); i++) {
+        
+        // Open-Meteo returns times in the location's timezone (timezone=auto)
+        // We need to find which hour is closest to "now" in that timezone
+        // The current time from OpenWeatherMap is weatherData.dt (Unix timestamp)
+        const currentTime = new Date(weatherData.dt * 1000);
+        const currentHourInLocation = currentTime.getHours();
+        
+        // Find the index in hourly data that matches or is after the current hour
+        let startIndex = 0;
+        let currentHourTimeStr = ''; // Store the current hour's time string
+        for (let i = 0; i < forecastData.hourly.time.length; i++) {
+            const timeStr = forecastData.hourly.time[i]; // e.g., "2025-12-12T14:00"
+            const [datePart, timePart] = timeStr.split('T');
+            const hourInData = parseInt(timePart.split(':')[0]);
+            
+            // If this hour is >= current hour, start from here
+            if (hourInData >= currentHourInLocation) {
+                startIndex = i;
+                currentHourTimeStr = timeStr; // Store the current hour's time
+                break;
+            }
+        }
+        
+        // If we didn't find any hour >= current hour today, start from index 0 (next day's data)
+        if (startIndex === 0 && forecastData.hourly.time.length > 0) {
+            const firstHour = parseInt(forecastData.hourly.time[0].split('T')[1].split(':')[0]);
+            if (firstHour < currentHourInLocation) {
+                startIndex = 0; // Start from first available time
+                currentHourTimeStr = forecastData.hourly.time[0]; // Use first available time
+            }
+        }
+        
+        // Store the current time in the location's timezone
+        // Open-Meteo provides utc_offset_seconds which is the timezone offset from UTC
+        const utcOffsetSeconds = forecastData.utc_offset_seconds || 0;
+        
+        // Get current UTC time in milliseconds
+        const nowUTC = new Date();
+        const utcMs = nowUTC.getTime();
+        
+        // Convert to location's local time by adding offset
+        const localMs = utcMs + (utcOffsetSeconds * 1000);
+        
+        // Calculate hours and minutes from the adjusted milliseconds
+        const totalSeconds = Math.floor(localMs / 1000) % 86400; // Seconds within the current day
+        const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+        const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+        
+        state.currentHourTime = `${hours}:${minutes}`;
+        
+        // Get all 24 hours for today (or available data)
+        // Find the start of today's data
+        let todayStartIndex = 0;
+        if (forecastData.hourly.time.length > 0) {
+            const firstTimeStr = forecastData.hourly.time[0];
+            const firstDatePart = firstTimeStr.split('T')[0];
+            const todayDate = new Date(nowUTC.getTime() + (utcOffsetSeconds * 1000)).toISOString().split('T')[0];
+            
+            // Find where today's data starts
+            for (let i = 0; i < forecastData.hourly.time.length; i++) {
+                if (forecastData.hourly.time[i].startsWith(todayDate)) {
+                    todayStartIndex = i;
+                    break;
+                }
+            }
+        }
+        
+        // Get all 24 hours (or less if not available)
+        const endIndex = Math.min(todayStartIndex + 24, forecastData.hourly.time.length);
+        for (let i = todayStartIndex; i < endIndex; i++) {
             state.hourlyData.push({
+                time: forecastData.hourly.time[i], // Keep original time string
                 dt: new Date(forecastData.hourly.time[i]).getTime() / 1000,
                 main: {
                     temp: Math.round(forecastData.hourly.temperature_2m[i] * 10) / 10,
@@ -425,6 +512,9 @@ async function fetchWeatherData(lat, lon) {
                 rain: forecastData.hourly.precipitation[i] ? { '3h': forecastData.hourly.precipitation[i] } : null
             });
         }
+        
+        // Initialize the hourly scroll position
+        state.hourlyScrollPosition = 0;
 
         // Process daily forecast from Open-Meteo
         state.forecast = {
@@ -448,7 +538,6 @@ async function fetchWeatherData(lat, lon) {
 
         // Update UI
         updateCurrentWeather();
-        updateHourlyForecast();
         updateDailyForecast();
         updateCharts();
         // Air quality data from OpenWeatherMap
@@ -464,6 +553,129 @@ async function fetchWeatherData(lat, lon) {
     } finally {
         showLoadingSpinner(false);
     }
+}
+
+// Utility function: Get wind direction from degrees
+function getWindDirection(degrees) {
+    const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    const index = Math.round(degrees / 22.5) % 16;
+    return directions[index];
+}
+
+// Utility function: Calculate dew point (approximation)
+function calculateDewPoint(temp, humidity) {
+    const a = 17.27;
+    const b = 237.7;
+    const alpha = ((a * temp) / (b + temp)) + Math.log(humidity / 100);
+    const dewPoint = (b * alpha) / (a - alpha);
+    return Math.round(dewPoint * 10) / 10;
+}
+
+// Utility function: Get UV index level description
+function getUVLevel(uvIndex) {
+    if (uvIndex < 3) return 'Low';
+    if (uvIndex < 6) return 'Moderate';
+    if (uvIndex < 8) return 'High';
+    if (uvIndex < 11) return 'Very High';
+    return 'Extreme';
+}
+
+// Utility function: Generate weather alerts
+function generateAlerts(weatherData, forecast) {
+    const alerts = [];
+    
+    // Temperature extremes
+    if (weatherData.main.temp < 0) {
+        alerts.push({
+            type: 'cold',
+            message: '❄️ Freezing Temperature - Extreme cold warning',
+            severity: 'high'
+        });
+    }
+    if (weatherData.main.temp > 40) {
+        alerts.push({
+            type: 'heat',
+            message: '🔥 Extreme Heat - Heat warning in effect',
+            severity: 'high'
+        });
+    }
+    
+    // Wind alerts
+    if (weatherData.wind.speed > 15) {
+        alerts.push({
+            type: 'wind',
+            message: '💨 High Wind Speed - ' + Math.round(weatherData.wind.speed) + ' m/s',
+            severity: 'medium'
+        });
+    }
+    
+    // Visibility alerts
+    if (weatherData.visibility < 1000) {
+        alerts.push({
+            type: 'visibility',
+            message: '🌫️ Poor Visibility - Only ' + (weatherData.visibility / 1000).toFixed(1) + ' km',
+            severity: 'medium'
+        });
+    }
+    
+    // Thunderstorm alerts
+    if (weatherData.weather[0].main === 'Thunderstorm') {
+        alerts.push({
+            type: 'storm',
+            message: '⚡ Thunderstorm - Take shelter immediately',
+            severity: 'high'
+        });
+    }
+    
+    return alerts;
+}
+
+// Utility function: Add to search history
+function addToSearchHistory(city, country) {
+    const entry = `${city}, ${country}`;
+    state.searchHistory = state.searchHistory.filter(item => item !== entry);
+    state.searchHistory.unshift(entry);
+    state.searchHistory = state.searchHistory.slice(0, 10); // Keep last 10
+    localStorage.setItem('searchHistory', JSON.stringify(state.searchHistory));
+}
+
+// Utility function: Display full day hourly forecast
+function displayFullDayHourly() {
+    const container = document.getElementById('fullDayHourly');
+    if (!container || state.hourlyData.length === 0) return;
+    
+    container.innerHTML = '';
+    const startIndex = state.fullDayHourlyIndex;
+    const endIndex = Math.min(startIndex + 12, state.hourlyData.length);
+    
+    for (let i = startIndex; i < endIndex; i++) {
+        const hour = state.hourlyData[i];
+        const hourDiv = document.createElement('div');
+        hourDiv.className = 'hour-card';
+        hourDiv.innerHTML = `
+            <div class="hour-time">${hour.time.split('T')[1].substring(0, 5)}</div>
+            <img src="https://openweathermap.org/img/wn/${hour.weather[0].icon}@2x.png" alt="${hour.weather[0].main}" class="hour-icon">
+            <div class="hour-temp">${Math.round(hour.main.temp)}°</div>
+            <div class="hour-humidity">${hour.main.humidity}%</div>
+            ${hour.rain && hour.rain['3h'] ? `<div class="hour-rain">${hour.rain['3h']}mm</div>` : '<div class="hour-rain">--</div>'}
+        `;
+        container.appendChild(hourDiv);
+    }
+    
+    // Update button states
+    const prevBtn = document.getElementById('prevHourBtn');
+    const nextBtn = document.getElementById('nextHourBtn');
+    if (prevBtn) prevBtn.style.opacity = startIndex === 0 ? '0.5' : '1';
+    if (nextBtn) nextBtn.style.opacity = endIndex >= state.hourlyData.length ? '0.5' : '1';
+}
+
+// Function to scroll full day hourly forecast
+function scrollFullDayHourly(hours) {
+    if (!state.hourlyData || state.hourlyData.length === 0) return;
+    
+    state.fullDayHourlyIndex += hours;
+    state.fullDayHourlyIndex = Math.max(0, Math.min(state.fullDayHourlyIndex, state.hourlyData.length - 1));
+    displayFullDayHourly();
 }
 
 // Helper function to convert WMO weather codes to descriptions
@@ -516,14 +728,43 @@ function getWeatherIcon(code) {
 function updateCurrentWeather() {
     const data = state.currentWeather;
 
-    elements.cityName.textContent = `${data.name}, ${data.sys.country || 'World'}`;
+    // Get current time in the location's timezone from stored data
+    let timeString = '??:??';
+    if (state.currentHourTime) {
+        // state.currentHourTime is already in "HH:MM" format
+        timeString = state.currentHourTime;
+    }
+    
+    // Display city name with time on the same line
+    elements.cityName.textContent = `${data.name}, ${data.sys.country || 'World'} ${timeString}`;
+    elements.cityName.style.color = '#00d4ff';
+    
     elements.temperature.textContent = `${Math.round(data.main.temp)}°C`;
     elements.weatherDescription.textContent = data.weather[0].description;
     elements.humidity.textContent = `${data.main.humidity}%`;
+    
+    // Update wind with direction
+    const windDir = getWindDirection(state.currentWeather.wind?.deg || 0);
     elements.windSpeed.textContent = `${data.wind.speed.toFixed(1)} m/s`;
+    const windDirElem = document.getElementById('windDirection');
+    if (windDirElem) windDirElem.textContent = `${windDir}`;
+    
     elements.pressure.textContent = `${Math.round(data.main.pressure)} hPa`;
     elements.visibility.textContent = `${(data.visibility / 1000).toFixed(1)} km`;
     elements.feelsLike.textContent = `${Math.round(data.main.feels_like)}°C`;
+    
+    // Add dew point
+    const dewPoint = calculateDewPoint(data.main.temp, data.main.humidity);
+    const dewPointElem = document.getElementById('dewPoint');
+    if (dewPointElem) dewPointElem.textContent = `${dewPoint}°C`;
+    
+    // Add sunrise/sunset times
+    const sunriseDate = new Date(data.sys.sunrise * 1000);
+    const sunsetDate = new Date(data.sys.sunset * 1000);
+    const sunriseElem = document.getElementById('sunrise');
+    const sunsetElem = document.getElementById('sunset');
+    if (sunriseElem) sunriseElem.textContent = sunriseDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    if (sunsetElem) sunsetElem.textContent = sunsetDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 
     // Weather icon - OpenWeatherMap icon code
     const iconCode = data.weather[0].icon;
@@ -535,6 +776,15 @@ function updateCurrentWeather() {
 
     // Get UV index (from forecast data, approximation)
     updateUVIndex();
+    
+    // Display weather alerts
+    displayWeatherAlerts(data);
+    
+    // Display full day hourly forecast
+    displayFullDayHourly();
+    
+    // Add to search history
+    addToSearchHistory(data.name, data.sys.country || 'World');
 }
 
 // Update Date and Time
@@ -568,30 +818,119 @@ function updateUVIndex() {
 
     const adjustedUV = (baseUV * (1 - cloudCover / 100)).toFixed(1);
     elements.uvIndex.textContent = adjustedUV;
+    
+    // Add UV level
+    const uvLevel = getUVLevel(parseFloat(adjustedUV));
+    const uvLevelElem = document.getElementById('uvLevel');
+    if (uvLevelElem) uvLevelElem.textContent = `(${uvLevel})`;
+}
+
+// Display weather alerts
+function displayWeatherAlerts(weatherData) {
+    const alerts = generateAlerts(weatherData, state.forecast);
+    const alertsSection = document.getElementById('alertsSection');
+    const alertsContainer = document.getElementById('alertsContainer');
+    
+    if (!alertsSection || !alertsContainer) return;
+    
+    if (alerts.length === 0) {
+        alertsSection.style.display = 'none';
+        return;
+    }
+    
+    alertsSection.style.display = 'block';
+    alertsContainer.innerHTML = '';
+    
+    alerts.forEach(alert => {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert-item alert-${alert.severity}`;
+        alertDiv.textContent = alert.message;
+        alertsContainer.appendChild(alertDiv);
+    });
 }
 
 // Update Hourly Forecast
 function updateHourlyForecast() {
-    const forecastList = state.hourlyData.slice(0, 8); // Next 24 hours (8 items from hourly data)
-
-    elements.hourlyForecast.innerHTML = forecastList.map(item => {
-        const date = new Date(item.dt * 1000);
-        const hour = date.getHours().toString().padStart(2, '0');
-        const minute = date.getMinutes().toString().padStart(2, '0');
-        const time = `${hour}:${minute}`;
+    // Show all 24 hours in a scrollable container
+    const cardsHtml = state.hourlyData.map(item => {
+        let time = '';
+        if (item.time) {
+            const timePart = item.time.split('T')[1];
+            time = timePart.substring(0, 5);
+        } else {
+            const date = new Date(item.dt * 1000);
+            const hour = date.getHours().toString().padStart(2, '0');
+            const minute = date.getMinutes().toString().padStart(2, '0');
+            time = `${hour}:${minute}`;
+        }
+        
         const temp = Math.round(item.main.temp);
         const icon = item.weather[0].icon;
-        const feelsLike = Math.round(item.main.feels_like);
+        const humidity = item.main.humidity;
+        const rain = item.rain ? item.rain['3h'] || 0 : 0;
 
         return `
             <div class="hourly-card fade-in">
                 <div class="hourly-time">${time}</div>
                 <img src="https://openweathermap.org/img/wn/${icon}@2x.png" alt="Weather" class="hourly-icon">
                 <div class="hourly-temp">${temp}°</div>
-                <div class="hourly-detail">Feels: ${feelsLike}°</div>
+                <div class="hourly-detail">💧 ${humidity}%</div>
+                ${rain > 0 ? `<div class="hourly-detail">🌧️ ${rain.toFixed(1)}mm</div>` : '<div class="hourly-detail">--</div>'}
             </div>
         `;
     }).join('');
+
+    // Create container with navigation
+    const totalHours = state.hourlyData.length;
+    
+    elements.hourlyForecast.innerHTML = `
+        <div class="hourly-container">
+            <button class="hourly-nav-btn hourly-left" id="hourly-prev">◀ Prev</button>
+            <div class="hourly-scroll-wrapper" id="hourly-scroll">
+                ${cardsHtml}
+            </div>
+            <button class="hourly-nav-btn hourly-right" id="hourly-next">Next ▶</button>
+        </div>
+    `;
+    
+    // Get scroll container
+    const scrollContainer = document.getElementById('hourly-scroll');
+    const prevBtn = document.getElementById('hourly-prev');
+    const nextBtn = document.getElementById('hourly-next');
+    const cardWidth = 130; // Approximate card width with gap
+    
+    // Scroll functionality
+    const scroll = (direction) => {
+        const scrollAmount = cardWidth * 5; // Scroll 5 cards at a time
+        scrollContainer.scrollBy({
+            left: direction === 'right' ? scrollAmount : -scrollAmount,
+            behavior: 'smooth'
+        });
+        updateScrollButtons();
+    };
+    
+    const updateScrollButtons = () => {
+        const atStart = scrollContainer.scrollLeft === 0;
+        const atEnd = scrollContainer.scrollLeft >= scrollContainer.scrollWidth - scrollContainer.clientWidth - 10;
+        
+        prevBtn.classList.toggle('disabled', atStart);
+        nextBtn.classList.toggle('disabled', atEnd);
+        prevBtn.disabled = atStart;
+        nextBtn.disabled = atEnd;
+    };
+    
+    // Event listeners
+    prevBtn.addEventListener('click', () => scroll('left'));
+    nextBtn.addEventListener('click', () => scroll('right'));
+    
+    // Keyboard support
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') scroll('left');
+        if (e.key === 'ArrowRight') scroll('right');
+    });
+    
+    // Initial button state
+    updateScrollButtons();
 }
 
 // Update Daily Forecast
@@ -783,28 +1122,62 @@ function updateCharts() {
 
     if (hourlyData.length === 0) return;
 
-    // Temperature Chart
-    updateTemperatureChart(hourlyData);
+    // Find current hour index
+    let currentHourIndex = 0;
+    const now = new Date();
+    const currentUTC = now.getTime();
+    const utcOffsetSeconds = (hourlyData[0] ? (currentUTC / 1000 - (hourlyData[0].dt || 0)) : 0);
+    
+    // Find the index closest to current time
+    for (let i = 0; i < hourlyData.length; i++) {
+        const hourTime = hourlyData[i].time.split('T')[1].substring(0, 2); // Get hour
+        if (parseInt(hourTime) >= new Date(currentUTC + utcOffsetSeconds * 1000).getHours()) {
+            currentHourIndex = i;
+            break;
+        }
+    }
 
-    // Humidity Chart
-    updateHumidityChart(hourlyData);
+    // Temperature Chart - Show from 00:00 to current + next 12 hours
+    updateTemperatureChart(hourlyData, currentHourIndex);
+
+    // Humidity Chart - Show from 00:00 to current + next 12 hours
+    updateHumidityChart(hourlyData, currentHourIndex);
 }
 
 // Update Temperature Chart
-function updateTemperatureChart(data) {
+function updateTemperatureChart(data, currentHourIndex) {
     const ctx = document.getElementById('temperatureChart');
     if (!ctx) return;
 
-    // Fix: Format time labels with HH:MM format and avoid showing duplicate "5:00"
-    const labels = data.map(item => {
-        const date = new Date(item.dt * 1000);
-        const hour = date.getHours().toString().padStart(2, '0');
-        const minute = date.getMinutes().toString().padStart(2, '0');
-        return `${hour}:${minute}`;
+    // Get data from start of day (00:00) to current hour + 12 hours
+    let startIndex = 0;
+    // Find where today starts (00:00)
+    for (let i = 0; i < data.length; i++) {
+        const hour = parseInt(data[i].time.split('T')[1].substring(0, 2));
+        if (hour === 0) {
+            startIndex = i;
+            break;
+        }
+    }
+
+    // Get up to 24 hours of data (from 00:00 onwards or first available)
+    const endIndex = Math.min(startIndex + 24, data.length);
+    const chartData = data.slice(startIndex, endIndex);
+
+    // Format time labels
+    const labels = chartData.map(item => {
+        if (item.time) {
+            return item.time.split('T')[1].substring(0, 5);
+        } else {
+            const date = new Date(item.dt * 1000);
+            const hour = date.getHours().toString().padStart(2, '0');
+            const minute = date.getMinutes().toString().padStart(2, '0');
+            return `${hour}:${minute}`;
+        }
     });
 
-    const temps = data.map(item => Math.round(item.main.temp));
-    const feelsLike = data.map(item => Math.round(item.main.feels_like));
+    const temps = chartData.map(item => Math.round(item.main.temp));
+    const feelsLike = chartData.map(item => Math.round(item.main.feels_like));
 
     if (state.chartInstances.temperature) {
         state.chartInstances.temperature.destroy();
@@ -818,28 +1191,30 @@ function updateTemperatureChart(data) {
                 {
                     label: 'Temperature (°C)',
                     data: temps,
-                    borderColor: '#00d4ff',
-                    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                    borderColor: '#ff6b35',
+                    backgroundColor: 'rgba(255, 107, 53, 0.15)',
                     borderWidth: 3,
                     fill: true,
                     tension: 0.4,
-                    pointBackgroundColor: '#00d4ff',
-                    pointBorderColor: '#00d4ff',
-                    pointRadius: 5,
-                    pointHoverRadius: 7
+                    pointBackgroundColor: '#ff6b35',
+                    pointBorderColor: '#fff',
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
+                    pointBorderWidth: 2
                 },
                 {
                     label: 'Feels Like (°C)',
                     data: feelsLike,
-                    borderColor: '#4ecdc4',
-                    backgroundColor: 'rgba(78, 205, 196, 0.05)',
+                    borderColor: '#ffa500',
+                    backgroundColor: 'rgba(255, 165, 0, 0.08)',
                     borderWidth: 2,
                     fill: false,
                     tension: 0.4,
-                    pointBackgroundColor: '#4ecdc4',
-                    pointBorderColor: '#4ecdc4',
+                    pointBackgroundColor: '#ffa500',
+                    pointBorderColor: '#fff',
                     pointRadius: 4,
                     pointHoverRadius: 6,
+                    pointBorderWidth: 2,
                     borderDash: [5, 5]
                 }
             ]
@@ -851,8 +1226,9 @@ function updateTemperatureChart(data) {
                 legend: {
                     labels: {
                         color: '#b0b0b0',
-                        font: { size: 12, weight: '500' },
-                        padding: 15
+                        font: { size: 12, weight: '600' },
+                        padding: 15,
+                        usePointStyle: true
                     }
                 },
                 filler: {
@@ -881,7 +1257,7 @@ function updateTemperatureChart(data) {
                     },
                     ticks: {
                         color: '#b0b0b0',
-                        font: { size: 11 }
+                        font: { size: 10 }
                     }
                 }
             }
@@ -890,20 +1266,39 @@ function updateTemperatureChart(data) {
 }
 
 // Update Humidity Chart
-function updateHumidityChart(data) {
+function updateHumidityChart(data, currentHourIndex) {
     const ctx = document.getElementById('humidityChart');
     if (!ctx) return;
 
-    // Fix: Format time labels with HH:MM format
-    const labels = data.map(item => {
-        const date = new Date(item.dt * 1000);
-        const hour = date.getHours().toString().padStart(2, '0');
-        const minute = date.getMinutes().toString().padStart(2, '0');
-        return `${hour}:${minute}`;
+    // Get data from start of day (00:00) to current hour + 12 hours
+    let startIndex = 0;
+    // Find where today starts (00:00)
+    for (let i = 0; i < data.length; i++) {
+        const hour = parseInt(data[i].time.split('T')[1].substring(0, 2));
+        if (hour === 0) {
+            startIndex = i;
+            break;
+        }
+    }
+
+    // Get up to 24 hours of data (from 00:00 onwards or first available)
+    const endIndex = Math.min(startIndex + 24, data.length);
+    const chartData = data.slice(startIndex, endIndex);
+
+    // Format time labels
+    const labels = chartData.map(item => {
+        if (item.time) {
+            return item.time.split('T')[1].substring(0, 5);
+        } else {
+            const date = new Date(item.dt * 1000);
+            const hour = date.getHours().toString().padStart(2, '0');
+            const minute = date.getMinutes().toString().padStart(2, '0');
+            return `${hour}:${minute}`;
+        }
     });
 
-    const humidity = data.map(item => item.main.humidity);
-    const precipitation = data.map(item => {
+    const humidity = chartData.map(item => item.main.humidity);
+    const precipitation = chartData.map(item => {
         if (!item.rain) return 0;
         return typeof item.rain === 'object' ? (item.rain['3h'] || 0) : item.rain;
     });
@@ -920,22 +1315,29 @@ function updateHumidityChart(data) {
                 {
                     label: 'Humidity (%)',
                     data: humidity,
-                    backgroundColor: 'rgba(74, 192, 252, 0.6)',
-                    borderColor: '#4ac0fc',
+                    backgroundColor: 'rgba(0, 212, 255, 0.7)',
+                    borderColor: '#00d4ff',
                     borderWidth: 2,
-                    yAxisID: 'y'
+                    yAxisID: 'y',
+                    borderRadius: 8,
+                    borderSkipped: false
                 },
                 {
                     label: 'Precipitation (mm)',
                     data: precipitation,
-                    backgroundColor: 'rgba(76, 175, 255, 0.4)',
+                    backgroundColor: 'rgba(100, 200, 255, 0)',
                     borderColor: '#4caffe',
-                    borderWidth: 1,
+                    borderWidth: 3,
                     type: 'line',
                     yAxisID: 'y1',
-                    borderDash: [3, 3],
-                    fill: false,
-                    tension: 0.4
+                    fill: true,
+                    backgroundColor: 'rgba(76, 175, 255, 0.15)',
+                    tension: 0.4,
+                    pointBackgroundColor: '#4caffe',
+                    pointBorderColor: '#fff',
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBorderWidth: 2
                 }
             ]
         },
@@ -946,8 +1348,9 @@ function updateHumidityChart(data) {
                 legend: {
                     labels: {
                         color: '#b0b0b0',
-                        font: { size: 12, weight: '500' },
-                        padding: 15
+                        font: { size: 12, weight: '600' },
+                        padding: 15,
+                        usePointStyle: true
                     }
                 }
             },
@@ -966,21 +1369,22 @@ function updateHumidityChart(data) {
                         callback: function(value) {
                             return value + '%';
                         }
-                    }
+                    },
+                    min: 0,
+                    max: 100
                 },
                 y1: {
                     type: 'linear',
                     display: true,
                     position: 'right',
                     grid: {
-                        drawOnChartArea: false,
-                        drawBorder: false
+                        drawOnChartArea: false
                     },
                     ticks: {
                         color: '#4caffe',
                         font: { size: 11 },
                         callback: function(value) {
-                            return value + ' mm';
+                            return value + 'mm';
                         }
                     }
                 },
@@ -991,7 +1395,7 @@ function updateHumidityChart(data) {
                     },
                     ticks: {
                         color: '#b0b0b0',
-                        font: { size: 11 }
+                        font: { size: 10 }
                     }
                 }
             }

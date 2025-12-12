@@ -34,6 +34,14 @@
 
         <!-- Main Content -->
         <main class="main">
+            <!-- Weather Alerts Section -->
+            <section class="forecast-section alert-section" id="alertsSection" style="display: none;">
+                <h3><i class="fas fa-exclamation-triangle"></i> Weather Alerts</h3>
+                <div class="alerts-container" id="alertsContainer">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </section>
+            
             <!-- Current Weather Section -->
             <section class="weather-section current-weather">
                 <div class="weather-card">
@@ -56,8 +64,9 @@
                                 <span id="humidity" class="value">--%</span>
                             </div>
                             <div class="detail-item">
-                                <span class="label"><i class="fas fa-wind"></i> Wind Speed</span>
+                                <span class="label"><i class="fas fa-wind"></i> Wind</span>
                                 <span id="windSpeed" class="value">-- m/s</span>
+                                <span id="windDirection" class="wind-direction">--</span>
                             </div>
                             <div class="detail-item">
                                 <span class="label"><i class="fas fa-gauge"></i> Pressure</span>
@@ -73,18 +82,38 @@
                             </div>
                             <div class="detail-item">
                                 <span class="label"><i class="fas fa-sun"></i> UV Index</span>
-                                <span id="uvIndex" class="value">--</span>
+                                <span id="uvIndex" class="value">-- <span id="uvLevel" class="uv-level"></span></span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="label"><i class="fas fa-water"></i> Dew Point</span>
+                                <span id="dewPoint" class="value">--°</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="label"><i class="fas fa-sunrise"></i> Sunrise</span>
+                                <span id="sunrise" class="value">--:--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="label"><i class="fas fa-sunset"></i> Sunset</span>
+                                <span id="sunset" class="value">--:--</span>
                             </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Hourly Forecast Section -->
+            <!-- Full Day Hourly Forecast Section -->
             <section class="forecast-section">
-                <h3><i class="fas fa-clock"></i> Hourly Forecast</h3>
-                <div class="hourly-forecast" id="hourlyForecast">
-                    <!-- Populated by JavaScript -->
+                <h3><i class="fas fa-clock"></i> Hourly Forecast (All 24 Hours)</h3>
+                <div class="full-day-forecast-container">
+                    <button class="forecast-nav-btn prev-btn" id="prevHourBtn" title="Previous hours (← arrow)">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <div class="full-day-hourly" id="fullDayHourly">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                    <button class="forecast-nav-btn next-btn" id="nextHourBtn" title="Next hours (→ arrow)">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
                 </div>
             </section>
 
