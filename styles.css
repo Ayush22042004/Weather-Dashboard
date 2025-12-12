@@ -532,7 +532,7 @@ body.theme-day {
 
 /* Main Content */
 .main {
-    padding: 50px 0;
+    padding: 40px 0;
 }
 
 /* Weather Card */
@@ -1147,6 +1147,10 @@ body.theme-day {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+    .container {
+        padding: 0 12px;
+    }
+
     .header h1 {
         font-size: 22px;
     }
@@ -1163,6 +1167,11 @@ body.theme-day {
     .weather-main {
         grid-template-columns: 1fr;
         gap: 30px;
+    }
+
+    .weather-display {
+        flex-direction: column;
+        gap: 20px;
     }
 
     .temperature {
@@ -1236,6 +1245,14 @@ body.theme-day {
 
     .location-info h2 {
         font-size: 20px;
+        flex-wrap: wrap;
+        gap: 8px;
+        line-height: 1.3;
+    }
+
+    .location-info h2 i {
+        font-size: 20px;
+        flex-shrink: 0;
     }
 
     .temperature {
@@ -1589,6 +1606,130 @@ body.theme-day {
     .hour-card {
         padding: 8px 4px;
         min-width: 65px;
+    }
+}
+
+/* Extra small phones (< 360px) */
+@media (max-width: 360px) {
+    .header h1 {
+        font-size: 16px;
+    }
+
+    .header h1 i {
+        font-size: 20px;
+    }
+
+    .weather-card {
+        padding: 14px;
+    }
+
+    .location-info h2 {
+        font-size: 18px;
+    }
+
+    .location-info h2 i {
+        font-size: 18px;
+    }
+
+    .temperature {
+        font-size: 32px;
+    }
+
+    .description {
+        font-size: 16px;
+    }
+
+    .date-time {
+        font-size: 12px;
+    }
+
+    .weather-main {
+        gap: 15px;
+    }
+
+    .weather-display {
+        gap: 15px;
+    }
+
+    .weather-icon-large {
+        width: 80px;
+        height: 80px;
+    }
+
+    .detail-item {
+        padding: 10px;
+    }
+
+    .detail-item .label {
+        font-size: 10px;
+    }
+
+    .detail-item .value {
+        font-size: 14px;
+    }
+
+    .forecast-section {
+        padding: 15px;
+    }
+
+    .forecast-section h3 {
+        font-size: 16px;
+        margin-bottom: 15px;
+    }
+
+    .hourly-card {
+        padding: 10px 6px;
+        min-height: auto;
+    }
+
+    .hourly-time {
+        font-size: 9px;
+    }
+
+    .hourly-temp {
+        font-size: 14px;
+    }
+
+    .hourly-icon {
+        width: 35px;
+        height: 35px;
+    }
+
+    .daily-card {
+        padding: 12px;
+    }
+
+    .daily-date {
+        font-size: 12px;
+    }
+
+    .daily-icon {
+        width: 45px;
+        height: 45px;
+    }
+
+    .hourly-nav-btn {
+        padding: 10px 14px;
+        font-size: 14px;
+        min-width: 90px;
+    }
+
+    .chart-container {
+        padding: 15px;
+    }
+
+    .chart-container h3 {
+        font-size: 14px;
+    }
+
+    .aq-scale {
+        font-size: 32px;
+    }
+
+    .aq-scale-item {
+        min-width: 30px;
+        height: 30px;
+        font-size: 10px;
     }
 }
 
