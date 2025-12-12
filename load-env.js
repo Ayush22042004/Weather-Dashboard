@@ -3,6 +3,9 @@
 
 window.__ENV__ = {};
 
+// For Netlify: create a namespace for injected variables
+window.__netlify = window.__netlify || {};
+
 // Try to fetch .env file synchronously by using XMLHttpRequest
 const xhr = new XMLHttpRequest();
 xhr.open('GET', '.env', false); // false = synchronous
@@ -19,7 +22,13 @@ xhr.onload = function() {
                 
                 // Remove quotes if present
                 const cleanValue = value.replace(/^["']|["']$/g, '');
-                window.__ENV__[key.trim()] = cleanValue;
+                const cleanKey = key.trim();
+                window.__ENV__[cleanKey] = cleanValue;
+                
+                // Also expose OPENWEATHER_API_KEY for Netlify compatibility
+                if (cleanKey === 'VITE_OPENWEATHER_API_KEY') {
+                    window.__netlify.OPENWEATHER_API_KEY = cleanValue;
+                }
             }
         });
         

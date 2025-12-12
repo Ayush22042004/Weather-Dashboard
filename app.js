@@ -4,23 +4,23 @@
 
 // Get API key from environment or use fallback for local dev
 const getAPIKey = () => {
-    // Check if running in browser with window object
-    if (typeof window !== 'undefined' && window.__ENV__) {
+    // Priority 1: Check window.__ENV__ (loaded from .env file locally)
+    if (typeof window !== 'undefined' && window.__ENV__ && window.__ENV__.VITE_OPENWEATHER_API_KEY) {
         return window.__ENV__.VITE_OPENWEATHER_API_KEY;
     }
     
-    // For local development with .env file loaded via script
-    if (typeof VITE_OPENWEATHER_API_KEY !== 'undefined') {
-        return VITE_OPENWEATHER_API_KEY;
+    // Priority 2: Check window.__netlify environment object (Netlify function/variable)
+    if (typeof window !== 'undefined' && window.__netlify && window.__netlify.OPENWEATHER_API_KEY) {
+        return window.__netlify.OPENWEATHER_API_KEY;
     }
     
-    // Netlify-specific: environment variables injected at build time
+    // Priority 3: Netlify environment variables (injected at build/runtime)
     if (typeof process !== 'undefined' && process.env && process.env.OPENWEATHER_API_KEY) {
         return process.env.OPENWEATHER_API_KEY;
     }
     
-    // Fallback - should not be used in production
-    console.warn('⚠️ API Key not found in environment variables. Please check your .env file or Netlify environment variables.');
+    // No API key found
+    console.error('❌ API Key not found. Please add OPENWEATHER_API_KEY to Netlify environment variables.');
     return '';
 };
 
