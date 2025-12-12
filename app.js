@@ -2,17 +2,26 @@
 // SECURITY: API keys should be server-side only. This is a client-side demo app.
 // For production, move all API calls to a backend server/proxy.
 
-// Get API key from Netlify environment variables (hidden from client)
-// Fallback to environment variable if available, otherwise use a placeholder
+// Get API key from environment or use fallback for local dev
 const getAPIKey = () => {
-    // In Netlify, environment variables are injected at build time
-    // Access via process.env (requires build step) or window.__env__ (for runtime)
-    // For this app, we'll use the Netlify environment variable
+    // Check if running in browser with window object
+    if (typeof window !== 'undefined' && window.__ENV__) {
+        return window.__ENV__.VITE_OPENWEATHER_API_KEY;
+    }
+    
+    // For local development with .env file loaded via script
+    if (typeof VITE_OPENWEATHER_API_KEY !== 'undefined') {
+        return VITE_OPENWEATHER_API_KEY;
+    }
+    
+    // Netlify-specific: environment variables injected at build time
     if (typeof process !== 'undefined' && process.env && process.env.OPENWEATHER_API_KEY) {
         return process.env.OPENWEATHER_API_KEY;
     }
-    // Fallback for development (use .env file with dotenv)
-    return import.meta.env?.VITE_OPENWEATHER_API_KEY || '35102437e50d37262084332662179159';
+    
+    // Fallback - should not be used in production
+    console.warn('⚠️ API Key not found in environment variables. Please check your .env file or Netlify environment variables.');
+    return '';
 };
 
 const API_CONFIG = {
