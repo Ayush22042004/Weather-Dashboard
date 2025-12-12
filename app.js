@@ -1,18 +1,19 @@
-// Weather API Configuration
+// Weather API Configuration - Using OpenWeatherMap (accurate) + Open-Meteo for Forecasts
+// SECURITY: API keys should be server-side only. This is a client-side demo app.
+// For production, move all API calls to a backend server/proxy.
 const API_CONFIG = {
-    OPENWEATHER_KEY: '35102437e50d37262084332662179159', // Active API key
-    OPENWEATHER_BASE: 'https://api.openweathermap.org',
+    OPENMETEO_BASE: 'https://api.open-meteo.com/v1',
+    GEOCODING_BASE: 'https://geocoding-api.open-meteo.com/v1',
+    OPENWEATHER_BASE: 'https://api.openweathermap.org/data/2.5',
+    // Store actual key in backend environment variable, not client code
+    OPENWEATHER_API_KEY: '', // To be fetched from backend
     UNITS: 'metric'
 };
 
 // Theme Management System
 const THEMES = {
-    SPRING: 'spring',
-    SUMMER: 'summer',
-    AUTUMN: 'autumn',
-    WINTER: 'winter',
-    DARK: 'dark',
-    LIGHT: 'light'
+    DAY: 'day',
+    NIGHT: 'night'
 };
 
 const TIMES = {
@@ -28,71 +29,23 @@ const state = {
     hourlyData: [],
     chartInstances: { temperature: null, humidity: null },
     isLoading: false,
-    currentTheme: 'auto',
-    currentTimeOfDay: TIMES.NIGHT,
-    forceTimeOfDay: null, // null = auto, otherwise day or night
+    currentTheme: 'night',
     sunrise: null,
     sunset: null
 };
 
 const themeManager = {
-    getCurrentSeason(latitude) {
-        const month = new Date().getMonth();
-        
-        // Northern hemisphere seasons (using latitude to adjust)
-        if (latitude > 0) {
-            if (month >= 2 && month <= 4) return THEMES.SPRING;
-            if (month >= 5 && month <= 7) return THEMES.SUMMER;
-            if (month >= 8 && month <= 10) return THEMES.AUTUMN;
-            return THEMES.WINTER;
-        } else {
-            // Southern hemisphere seasons (reversed)
-            if (month >= 2 && month <= 4) return THEMES.AUTUMN;
-            if (month >= 5 && month <= 7) return THEMES.WINTER;
-            if (month >= 8 && month <= 10) return THEMES.SPRING;
-            return THEMES.SUMMER;
-        }
-    },
-    
-    isDayTime(sunrise, sunset) {
-        const now = new Date().getTime() / 1000; // Current time in seconds
-        return now >= sunrise && now < sunset;
-    },
-    
-    getCurrentTimeOfDay(sunrise, sunset) {
-        return this.isDayTime(sunrise, sunset) ? TIMES.DAY : TIMES.NIGHT;
-    },
-    
-    applyTheme(theme, timeOfDay = null) {
+    applyTheme(theme) {
         document.body.className = '';
-        let finalTheme = theme;
-        
-        // If a time of day is specified, apply day/night variant
-        if (timeOfDay && (theme === THEMES.SPRING || theme === THEMES.SUMMER || theme === THEMES.AUTUMN || theme === THEMES.WINTER)) {
-            finalTheme = `${theme}-${timeOfDay}`;
-        }
-        
-        document.body.classList.add(`theme-${finalTheme}`);
+        document.body.classList.add(`theme-${theme}`);
         state.currentTheme = theme;
-        state.currentTimeOfDay = timeOfDay || TIMES.NIGHT;
         localStorage.setItem('theme', theme);
-        updateThemeToggleIcon(theme, timeOfDay);
-    },
-    
-    getAutoTheme(latitude) {
-        const season = this.getCurrentSeason(latitude);
-        return season;
     },
     
     initializeTheme() {
-        const savedTheme = localStorage.getItem('theme') || 'auto';
+        const savedTheme = localStorage.getItem('theme') || 'night';
         state.currentTheme = savedTheme;
-        
-        if (savedTheme === 'auto' || savedTheme === 'light' || savedTheme === 'dark') {
-            this.applyTheme(savedTheme);
-        } else {
-            this.applyTheme(savedTheme);
-        }
+        this.applyTheme(savedTheme);
     }
 };
 
@@ -101,7 +54,6 @@ const elements = {
     searchInput: document.getElementById('searchInput'),
     searchBtn: document.getElementById('searchBtn'),
     locationBtn: document.getElementById('locationBtn'),
-    themeToggle: document.getElementById('themeToggle'),
     daylightToggle: document.getElementById('daylightToggle'),
     loadingSpinner: document.getElementById('loadingSpinner'),
     cityName: document.getElementById('cityName'),
@@ -137,7 +89,6 @@ function setupEventListeners() {
     });
     elements.searchInput.addEventListener('input', handleSearchInput);
     elements.locationBtn.addEventListener('click', handleLocationClick);
-    elements.themeToggle.addEventListener('click', toggleTheme);
     elements.daylightToggle.addEventListener('click', toggleDayNightMode);
     
     // Close suggestions when clicking outside
@@ -150,59 +101,47 @@ function setupEventListeners() {
 
 // Theme Toggle Handler
 function toggleTheme() {
-    const themes = Object.values(THEMES);
-    const currentIndex = themes.indexOf(state.currentTheme);
-    const nextIndex = (currentIndex + 1) % themes.length;
-    const nextTheme = themes[nextIndex];
-    
-    themeManager.applyTheme(nextTheme);
+    const newTheme = state.currentTheme === THEMES.DAY ? THEMES.NIGHT : THEMES.DAY;
+    themeManager.applyTheme(newTheme);
+    showNotification(`Switched to ${newTheme} mode 🌗`);
+    updateDayNightToggleIcon();
 }
 
 // Day/Night Toggle Handler
 function toggleDayNightMode() {
-    // Toggle between day and night
-    state.forceTimeOfDay = state.forceTimeOfDay === TIMES.DAY ? TIMES.NIGHT : TIMES.DAY;
-    
-    // Update theme with forced time of day
-    if (state.currentTheme !== THEMES.DARK && state.currentTheme !== THEMES.LIGHT) {
-        themeManager.applyTheme(state.currentTheme, state.forceTimeOfDay);
-    }
-    
-    updateDayNightToggleIcon();
-    showNotification(`Switched to ${state.forceTimeOfDay} mode 🌗`);
+    toggleTheme();
 }
 
 function updateDayNightToggleIcon() {
-    elements.daylightToggle.textContent = state.forceTimeOfDay === TIMES.DAY ? '☀️' : '🌙';
-    elements.daylightToggle.classList.toggle('night-mode', state.forceTimeOfDay === TIMES.NIGHT);
+    elements.daylightToggle.textContent = state.currentTheme === THEMES.DAY ? '☀️' : '🌙';
+    elements.daylightToggle.classList.toggle('night-mode', state.currentTheme === THEMES.NIGHT);
 }
 
-function updateThemeToggleIcon(theme, timeOfDay = null) {
-    const icons = {
-        [THEMES.SPRING]: { day: '🌸', night: '🌙' },
-        [THEMES.SUMMER]: { day: '☀️', night: '🌙' },
-        [THEMES.AUTUMN]: { day: '🍂', night: '🌙' },
-        [THEMES.WINTER]: { day: '❄️', night: '🌙' },
-        [THEMES.DARK]: { day: '🌙', night: '🌙' },
-        [THEMES.LIGHT]: { day: '🌞', night: '🌞' }
-    };
-    
-    const icon = icons[theme];
-    if (icon) {
-        if (timeOfDay) {
-            elements.themeToggle.textContent = icon[timeOfDay];
-        } else {
-            elements.themeToggle.textContent = icon.night || '🌙';
-        }
-    } else {
-        elements.themeToggle.textContent = '🌙';
-    }
+// Sanitize HTML to prevent XSS attacks
+function sanitizeHTML(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
 }
 
-// Search Handler
+// Validate search input to prevent injection and excessive queries
+function validateSearchInput(query) {
+    if (!query || typeof query !== 'string') return false;
+    // Trim and check length (min 2, max 100 characters)
+    query = query.trim();
+    if (query.length < 2 || query.length > 100) return false;
+    // Allow letters, numbers, spaces, hyphens, and commas only
+    return /^[a-zA-Z0-9\s\-,áéíóúàèìòùäëïöüñ]*$/.test(query);
+}
+
+// Search Handler with Input Validation
 async function handleSearch() {
     const query = elements.searchInput.value.trim();
-    if (!query) return;
+    
+    if (!validateSearchInput(query)) {
+        showError('Invalid location. Use letters, numbers, spaces, hyphens, or commas only (max 100 chars).');
+        return;
+    }
 
     try {
         showLoadingSpinner(true);
@@ -242,8 +181,8 @@ async function handleSearchInput(e) {
 // Fetch City Suggestions
 async function fetchCitySuggestions(query) {
     try {
-        const url = `${API_CONFIG.OPENWEATHER_BASE}/geo/1.0/direct?q=${query}&limit=10&appid=${API_CONFIG.OPENWEATHER_KEY}`;
-        const response = await fetch(url);
+        // Use backend API for search
+        const response = await fetch(`http://localhost:3000/api/geocode?query=${encodeURIComponent(query)}`);
         
         if (!response.ok) {
             throw new Error(`API error: ${response.status}`);
@@ -251,27 +190,37 @@ async function fetchCitySuggestions(query) {
         
         const data = await response.json();
         
-        if (data.length === 0) {
+        if (!data.results || data.results.length === 0) {
             elements.suggestionsList.innerHTML = '<li class="suggestion-item">No cities found</li>';
             elements.suggestionsList.classList.add('active');
             return;
         }
         
-        // Build suggestions list
-        elements.suggestionsList.innerHTML = data.map((city, index) => `
-            <li class="suggestion-item" data-index="${index}" data-lat="${city.lat}" data-lon="${city.lon}">
-                <strong>${city.name}</strong>${city.state ? ', ' + city.state : ''}, ${city.country}
-            </li>
-        `).join('');
+        // Build suggestions list - prioritize cities with admin1 (state/region)
+        elements.suggestionsList.innerHTML = data.results.slice(0, 10).map((city, index) => {
+            const admin1 = city.admin1 ? `, ${city.admin1}` : '';
+            const displayName = `${city.name}${admin1}, ${city.country}`;
+            return `
+                <li class="suggestion-item" data-index="${index}" data-lat="${city.latitude}" data-lon="${city.longitude}" data-name="${city.name}" data-country="${city.country}">
+                    <strong>${city.name}</strong>${admin1}, ${city.country}
+                </li>
+            `;
+        }).join('');
         
         // Add click handlers to suggestions
         document.querySelectorAll('.suggestion-item').forEach(item => {
             item.addEventListener('click', () => {
                 const lat = item.getAttribute('data-lat');
                 const lon = item.getAttribute('data-lon');
-                elements.searchInput.value = `${item.textContent}`;
+                const name = item.getAttribute('data-name');
+                const country = item.getAttribute('data-country');
+                
+                // Store location BEFORE fetching weather
+                state.currentLocation = { lat: parseFloat(lat), lon: parseFloat(lon), name, country };
+                
+                elements.searchInput.value = `${name}, ${country}`;
                 elements.suggestionsList.classList.remove('active');
-                fetchWeatherData(lat, lon);
+                fetchWeatherData(parseFloat(lat), parseFloat(lon));
             });
         });
         
@@ -289,13 +238,66 @@ async function handleLocationClick() {
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
                     const { latitude, longitude } = position.coords;
+                    console.log('Got location:', latitude, longitude);
+                    
+                    // Try to get location name from reverse geocoding using backend
+                    let locationName = 'Current Location';
+                    let countryCode = '';
+                    
+                    try {
+                        // Use backend API for reverse geocoding
+                        const response = await fetch(`http://localhost:3000/api/reverse-geocode?lat=${latitude}&lon=${longitude}`, { signal: AbortSignal.timeout(8000) });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            console.log('Reverse geocode response:', data);
+                            if (data.results && data.results.length > 0) {
+                                const result = data.results[0];
+                                console.log('Result object keys:', Object.keys(result));
+                                console.log('Result name field:', result.name);
+                                
+                                // Prioritize: name field (which is the city) > admin1 > admin2
+                                locationName = result.name || 
+                                               result.admin1 || 
+                                               result.admin2 || 
+                                               'Current Location';
+                                
+                                countryCode = result.country_code || 
+                                             result.country || '';
+                                
+                                console.log('Extracted location name:', locationName);
+                                console.log('Extracted country code:', countryCode);
+                            }
+                        } else {
+                            console.warn('Reverse geocode returned status:', response.status);
+                        }
+                    } catch (geoError) {
+                        console.warn('Reverse geocoding failed:', geoError.message);
+                        // Fallback: if backend is not available, still work with coordinates
+                    }
+                    
+                    // Set the location in state BEFORE fetching weather
+                    state.currentLocation = {
+                        lat: latitude,
+                        lon: longitude,
+                        name: locationName,
+                        country: countryCode
+                    };
+                    
+                    console.log('Set state.currentLocation:', state.currentLocation);
+                    
+                    // Now fetch weather with the location name already set
                     await fetchWeatherData(latitude, longitude);
                     showLoadingSpinner(false);
                 },
                 (error) => {
                     console.error('Geolocation error:', error);
-                    showError('Could not access your location');
+                    showError(`Location error: ${error.message}. Please enable location permissions.`);
                     showLoadingSpinner(false);
+                },
+                {
+                    timeout: 10000,
+                    enableHighAccuracy: false
                 }
             );
         } else {
@@ -311,18 +313,23 @@ async function handleLocationClick() {
 // Geocode Location
 async function geocodeLocation(query) {
     try {
-        const url = `${API_CONFIG.OPENWEATHER_BASE}/geo/1.0/direct?q=${query}&limit=1&appid=${API_CONFIG.OPENWEATHER_KEY}`;
-        const response = await fetch(url);
+        // Use backend API for geocoding
+        const response = await fetch(`http://localhost:3000/api/geocode?query=${encodeURIComponent(query)}`);
         if (!response.ok) {
             throw new Error(`Geocoding API error: ${response.status} ${response.statusText}`);
         }
         const data = await response.json();
 
-        if (data.length === 0) {
+        if (!data.results || data.results.length === 0) {
             throw new Error('Location not found');
         }
 
-        const { lat, lon, name, country } = data[0];
+        const city = data.results[0];
+        const lat = city.latitude;
+        const lon = city.longitude;
+        const name = city.name;
+        const country = city.country;
+        
         state.currentLocation = { lat, lon, name, country };
         return { lat, lon };
     } catch (error) {
@@ -336,48 +343,143 @@ async function fetchWeatherData(lat, lon) {
     try {
         showLoadingSpinner(true);
 
-        // Fetch current weather
-        const currentUrl = `${API_CONFIG.OPENWEATHER_BASE}/data/2.5/weather?lat=${lat}&lon=${lon}&units=${API_CONFIG.UNITS}&appid=${API_CONFIG.OPENWEATHER_KEY}`;
-        const currentResponse = await fetch(currentUrl);
-        if (!currentResponse.ok) {
-            throw new Error(`Current weather API error: ${currentResponse.status} ${currentResponse.statusText}`);
+        // Use backend API endpoints for secure API calls
+        const apiBase = 'http://localhost:3000/api'; // Backend server
+        
+        // Fetch current weather, forecast, and air quality from backend
+        const [weatherResponse, forecastResponse, airQualityResponse] = await Promise.all([
+            fetch(`${apiBase}/weather?lat=${lat}&lon=${lon}`),
+            fetch(`${apiBase}/forecast?lat=${lat}&lon=${lon}`),
+            fetch(`${apiBase}/air-quality?lat=${lat}&lon=${lon}`)
+        ]);
+        
+        if (!weatherResponse.ok) {
+            throw new Error(`Weather API error: ${weatherResponse.status}`);
         }
-        state.currentWeather = await currentResponse.json();
+        
+        if (!forecastResponse.ok) {
+            throw new Error(`Forecast API error: ${forecastResponse.status}`);
+        }
+        
+        const weatherData = await weatherResponse.json();
+        const forecastData = await forecastResponse.json();
+        const airQualityData = airQualityResponse.ok ? await airQualityResponse.json() : null;
+
+        
+        // Get location name - use stored location if available
+        let locationName = state.currentLocation?.name || weatherData.name || 'Current Location';
+        let countryCode = state.currentLocation?.country || weatherData.sys?.country || '';
+        
+        console.log('Current location state:', state.currentLocation);
+        console.log('Location name being used:', locationName);
+        console.log('Weather data:', weatherData);
+        
+        // Store weather data in a compatible format (from OpenWeatherMap)
+        state.currentWeather = {
+            name: locationName,
+            sys: {
+                country: countryCode,
+                sunrise: weatherData.sys.sunrise,
+                sunset: weatherData.sys.sunset
+            },
+            main: {
+                temp: Math.round(weatherData.main.temp * 10) / 10,
+                feels_like: Math.round(weatherData.main.feels_like * 10) / 10,
+                humidity: Math.round(weatherData.main.humidity),
+                pressure: Math.round(weatherData.main.pressure)
+            },
+            weather: [{
+                main: weatherData.weather[0].main,
+                description: weatherData.weather[0].description.toLowerCase(),
+                icon: weatherData.weather[0].icon
+            }],
+            wind: {
+                speed: Math.round(weatherData.wind.speed * 10) / 10
+            },
+            visibility: Math.round(weatherData.visibility || 10000),
+            clouds: {
+                all: weatherData.clouds?.all || 0
+            }
+        };
         
         // Capture sunrise and sunset times
         state.sunrise = state.currentWeather.sys.sunrise;
         state.sunset = state.currentWeather.sys.sunset;
         
-        // Auto-apply theme based on location's season and time of day if theme is set to 'auto'
-        if (state.currentTheme === 'auto') {
-            const seasonTheme = themeManager.getAutoTheme(lat);
-            const timeOfDay = state.forceTimeOfDay || themeManager.getCurrentTimeOfDay(state.sunrise, state.sunset);
-            themeManager.applyTheme(seasonTheme, timeOfDay);
-            state.currentTimeOfDay = timeOfDay;
+        // Auto-apply theme based on actual sunrise/sunset time
+        const isDay = isDayTime(state.sunrise, state.sunset);
+        const autoTheme = isDay ? THEMES.DAY : THEMES.NIGHT;
+        themeManager.applyTheme(autoTheme);
+
+        // Process hourly forecast data from OpenWeatherMap (5-day/3-hour forecast)
+        state.hourlyData = [];
+        const forecastList = forecastData.list || [];
+        for (let i = 0; i < Math.min(8, forecastList.length); i++) {
+            const item = forecastList[i];
+            state.hourlyData.push({
+                dt: item.dt,
+                main: {
+                    temp: item.main.temp,
+                    humidity: item.main.humidity,
+                    feels_like: item.main.feels_like
+                },
+                weather: [{
+                    main: item.weather[0].main,
+                    icon: item.weather[0].icon
+                }],
+                rain: item.rain ? item.rain : null
+            });
         }
 
-        // Fetch forecast (includes hourly and daily)
-        const forecastUrl = `${API_CONFIG.OPENWEATHER_BASE}/data/2.5/forecast?lat=${lat}&lon=${lon}&units=${API_CONFIG.UNITS}&appid=${API_CONFIG.OPENWEATHER_KEY}`;
-        const forecastResponse = await fetch(forecastUrl);
-        if (!forecastResponse.ok) {
-            throw new Error(`Forecast API error: ${forecastResponse.status} ${forecastResponse.statusText}`);
+        // Process daily forecast (group by day from the 5-day forecast)
+        state.forecast = {
+            list: []
+        };
+        const dailyData = {};
+        
+        // Group forecast data by day
+        for (const item of forecastList) {
+            const date = new Date(item.dt * 1000);
+            const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
+            
+            if (!dailyData[dateKey]) {
+                dailyData[dateKey] = {
+                    dt: item.dt,
+                    temps: [item.main.temp],
+                    weather: item.weather[0],
+                    rain: item.rain
+                };
+            } else {
+                dailyData[dateKey].temps.push(item.main.temp);
+            }
         }
-        state.forecast = await forecastResponse.json();
-
-        // Fetch air quality data
-        const aqUrl = `${API_CONFIG.OPENWEATHER_BASE}/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${API_CONFIG.OPENWEATHER_KEY}`;
-        const aqResponse = await fetch(aqUrl);
-        if (!aqResponse.ok) {
-            throw new Error(`Air quality API error: ${aqResponse.status} ${aqResponse.statusText}`);
-        }
-        const aqData = await aqResponse.json();
+        
+        // Create 5-day forecast from grouped data
+        Object.keys(dailyData).slice(0, 5).forEach(dateKey => {
+            const dayData = dailyData[dateKey];
+            const temps = dayData.temps;
+            state.forecast.list.push({
+                dt: dayData.dt,
+                main: {
+                    temp_max: Math.max(...temps),
+                    temp_min: Math.min(...temps),
+                    temp: (Math.max(...temps) + Math.min(...temps)) / 2
+                },
+                weather: [{
+                    main: dayData.weather.main,
+                    icon: dayData.weather.icon
+                }],
+                rain: dayData.rain ? dayData.rain : null
+            });
+        });
 
         // Update UI
         updateCurrentWeather();
         updateHourlyForecast();
         updateDailyForecast();
-        updateAirQuality(aqData);
         updateCharts();
+        // Air quality data from backend
+        updateAirQuality(airQualityData);
         updateLastUpdated();
         
         // Start monitoring for day/night transition
@@ -385,26 +487,72 @@ async function fetchWeatherData(lat, lon) {
 
     } catch (error) {
         console.error('Weather data fetch error:', error);
-        showError('Failed to fetch weather data: ' + error.message);
+        showError('Failed to fetch weather data. Please check your connection and try again.');
     } finally {
         showLoadingSpinner(false);
     }
+}
+
+// Helper function to convert WMO weather codes to descriptions
+function getWeatherDescription(code) {
+    const weatherCodes = {
+        0: 'Clear',
+        1: 'Mainly Clear',
+        2: 'Partly Cloudy',
+        3: 'Overcast',
+        45: 'Foggy',
+        48: 'Foggy',
+        51: 'Light Drizzle',
+        53: 'Moderate Drizzle',
+        55: 'Dense Drizzle',
+        61: 'Slight Rain',
+        63: 'Moderate Rain',
+        65: 'Heavy Rain',
+        71: 'Slight Snow',
+        73: 'Moderate Snow',
+        75: 'Heavy Snow',
+        80: 'Slight Rain Showers',
+        81: 'Moderate Rain Showers',
+        82: 'Violent Rain Showers',
+        85: 'Slight Snow Showers',
+        86: 'Heavy Snow Showers',
+        95: 'Thunderstorm',
+        96: 'Thunderstorm with Slight Hail',
+        99: 'Thunderstorm with Heavy Hail'
+    };
+    return weatherCodes[code] || 'Unknown';
+}
+
+// Helper function to map weather codes to icons
+function getWeatherIcon(code) {
+    // Map WMO codes to OpenWeatherMap-style icon codes for visual consistency
+    if (code === 0) return '01d'; // clear
+    if (code === 1 || code === 2) return '02d'; // cloudy
+    if (code === 3) return '04d'; // overcast
+    if ([45, 48].includes(code)) return '50d'; // fog
+    if ([51, 53, 55].includes(code)) return '09d'; // drizzle
+    if ([61, 63, 65].includes(code)) return '10d'; // rain
+    if ([71, 73, 75].includes(code)) return '13d'; // snow
+    if ([80, 81, 82].includes(code)) return '09d'; // rain showers
+    if ([85, 86].includes(code)) return '13d'; // snow showers
+    if ([95, 96, 99].includes(code)) return '11d'; // thunderstorm
+    return '01d';
 }
 
 // Update Current Weather
 function updateCurrentWeather() {
     const data = state.currentWeather;
 
-    elements.cityName.textContent = `${data.name}, ${data.sys.country}`;
+    elements.cityName.textContent = `${data.name}, ${data.sys.country || 'World'}`;
     elements.temperature.textContent = `${Math.round(data.main.temp)}°C`;
     elements.weatherDescription.textContent = data.weather[0].description;
     elements.humidity.textContent = `${data.main.humidity}%`;
     elements.windSpeed.textContent = `${data.wind.speed.toFixed(1)} m/s`;
-    elements.pressure.textContent = `${data.main.pressure} hPa`;
+    elements.pressure.textContent = `${Math.round(data.main.pressure)} hPa`;
     elements.visibility.textContent = `${(data.visibility / 1000).toFixed(1)} km`;
     elements.feelsLike.textContent = `${Math.round(data.main.feels_like)}°C`;
 
-    // Weather icon
+    // Weather icon - OpenWeatherMap icon code
     const iconCode = data.weather[0].icon;
     elements.weatherIcon.src = `https://openweathermap.org/img/wn/${iconCode}@4x.png`;
     elements.weatherIcon.alt = data.weather[0].main;
@@ -451,19 +599,20 @@ function updateUVIndex() {
 
 // Update Hourly Forecast
 function updateHourlyForecast() {
-    const forecastList = state.forecast.list.slice(0, 8); // Next 24 hours (8 x 3-hour intervals)
-    state.hourlyData = forecastList;
+    const forecastList = state.hourlyData.slice(0, 8); // Next 24 hours (8 items from hourly data)
 
     elements.hourlyForecast.innerHTML = forecastList.map(item => {
         const date = new Date(item.dt * 1000);
-        const hour = date.getHours().toString().padStart(2, '0') + ':00';
+        const hour = date.getHours().toString().padStart(2, '0');
+        const minute = date.getMinutes().toString().padStart(2, '0');
+        const time = `${hour}:${minute}`;
         const temp = Math.round(item.main.temp);
         const icon = item.weather[0].icon;
         const feelsLike = Math.round(item.main.feels_like);
 
         return `
             <div class="hourly-card fade-in">
-                <div class="hourly-time">${hour}</div>
+                <div class="hourly-time">${time}</div>
                 <img src="https://openweathermap.org/img/wn/${icon}@2x.png" alt="Weather" class="hourly-icon">
                 <div class="hourly-temp">${temp}°</div>
                 <div class="hourly-detail">Feels: ${feelsLike}°</div>
@@ -474,49 +623,17 @@ function updateHourlyForecast() {
 
 // Update Daily Forecast
 function updateDailyForecast() {
-    const dailyData = {};
+    const dailyData = state.forecast.list.slice(0, 5);
 
-    // Group forecast by day
-    state.forecast.list.forEach(item => {
+    elements.dailyForecast.innerHTML = dailyData.map((item, index) => {
         const date = new Date(item.dt * 1000);
-        const day = date.toLocaleDateString('en-US');
-
-        if (!dailyData[day]) {
-            dailyData[day] = [];
-        }
-        dailyData[day].push(item);
-    });
-
-    // Get next 5 days
-    const next5Days = Object.keys(dailyData).slice(0, 5);
-
-    elements.dailyForecast.innerHTML = next5Days.map(day => {
-        const dayItems = dailyData[day];
-        const temps = dayItems.map(item => item.main.temp);
-        const maxTemp = Math.round(Math.max(...temps));
-        const minTemp = Math.round(Math.min(...temps));
-
-        // Get most common weather
-        const weatherCounts = {};
-        dayItems.forEach(item => {
-            const desc = item.weather[0].main;
-            weatherCounts[desc] = (weatherCounts[desc] || 0) + 1;
-        });
-        const mainWeather = Object.keys(weatherCounts).reduce((a, b) =>
-            weatherCounts[a] > weatherCounts[b] ? a : b
-        );
-
-        // Get icon from that weather
-        const iconItem = dayItems.find(item => item.weather[0].main === mainWeather);
-        const icon = iconItem.weather[0].icon;
-
-        // Calculate rain probability
-        const rainProb = Math.round(
-            (dayItems.filter(item => item.rain).length / dayItems.length) * 100
-        );
-
-        const date = new Date(day);
         const formatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
+        
+        const maxTemp = Math.round(item.main.temp_max);
+        const minTemp = Math.round(item.main.temp_min);
+        const icon = item.weather[0].icon;
+        const mainWeather = item.weather[0].main;
+        const rainProb = item.rain ? (typeof item.rain === 'object' ? Math.round((item.rain['3h'] || 0) * 100) : Math.round(item.rain * 100)) : 0;
 
         return `
             <div class="daily-card fade-in">
@@ -535,54 +652,156 @@ function updateDailyForecast() {
 
 // Update Air Quality
 function updateAirQuality(data) {
-    const aqi = data.list[0].main.aqi; // AQI scale: 1=Good, 2=Fair, 3=Moderate, 4=Poor, 5=Very Poor
-    const components = data.list[0].components;
+    if (!data || !data.list || data.list.length === 0) {
+        // Fallback message if data is not available - Using safe DOM methods
+        const container = document.createElement('div');
+        container.className = 'aq-card fade-in aq-main';
+        container.style.borderColor = '#74c0fc';
+        container.style.background = 'linear-gradient(135deg, #74c0fc15 0%, rgba(0,212,255,0.05) 100%)';
+        container.innerHTML = '<div class="aq-main-content"><div><div class="aq-label">💨 Air Quality</div><div style="font-size: 14px; color: var(--text-primary); margin-top: 12px; line-height: 1.5; font-weight: 500;">Air quality data not available.</div></div></div>';
+        elements.airQuality.innerHTML = '';
+        elements.airQuality.appendChild(container);
+        return;
+    }
 
-    const aqiLevels = ['', 'Good', 'Fair', 'Moderate', 'Poor', 'Very Poor'];
-    const aqiColors = ['', '#51cf66', '#74c0fc', '#ffd43b', '#ff922b', '#ff6b6b'];
-    const aqiDescriptions = [
-        '', 
-        'Air quality is satisfactory. Enjoy outdoor activities!',
-        'Acceptable air quality. Enjoy outdoor activities.',
-        'Sensitive groups may experience health effects. Limit outdoor activity.',
-        'General public may experience health effects. Reduce outdoor activity.',
-        'Health alert! Everyone may experience serious health effects. Avoid outdoors.'
-    ];
+    const current = data.list[0]; // Get latest air quality data
+    const components = current.components;
 
-    const pollutants = [
-        { label: 'PM2.5', value: Math.round(components.pm2_5), unit: 'µg/m³', desc: 'Fine Particles' },
-        { label: 'PM10', value: Math.round(components.pm10), unit: 'µg/m³', desc: 'Coarse Particles' },
-        { label: 'NO₂', value: Math.round(components.no2), unit: 'µg/m³', desc: 'Nitrogen Dioxide' },
-        { label: 'O₃', value: Math.round(components.o3), unit: 'µg/m³', desc: 'Ozone' }
-    ];
+    // Extract pollutant values and clamp to valid ranges
+    const pm25 = components.pm2_5 ? Math.round(components.pm2_5 * 10) / 10 : 'N/A';
+    const pm10 = components.pm10 ? Math.round(components.pm10 * 10) / 10 : 'N/A';
+    const o3 = components.o3 ? Math.round(components.o3 * 10) / 10 : 'N/A';
+    const no2 = components.no2 ? Math.round(components.no2 * 10) / 10 : 'N/A';
 
-    elements.airQuality.innerHTML = `
-        <div class="aq-card fade-in aq-main" style="border-color: ${aqiColors[aqi]}; background: linear-gradient(135deg, ${aqiColors[aqi]}15 0%, rgba(0,212,255,0.05) 100%);">
-            <div class="aq-main-content">
-                <div>
-                    <div class="aq-label">🌍 Air Quality Index</div>
-                    <div class="aq-scale">${aqi}/5</div>
-                    <div class="aq-status" style="color: ${aqiColors[aqi]};">${aqiLevels[aqi]}</div>
-                    <div style="font-size: 14px; color: var(--text-primary); margin-top: 12px; line-height: 1.5; font-weight: 500;">${aqiDescriptions[aqi]}</div>
-                </div>
-                <div class="aq-scale-bar">
-                    <div class="aq-scale-item" style="background: #51cf66;" title="Good">1</div>
-                    <div class="aq-scale-item" style="background: #74c0fc;" title="Fair">2</div>
-                    <div class="aq-scale-item" style="background: #ffd43b; color: #000;" title="Moderate">3</div>
-                    <div class="aq-scale-item" style="background: #ff922b;" title="Poor">4</div>
-                    <div class="aq-scale-item ${aqi === 5 ? 'active' : ''}" style="background: #ff6b6b;" title="Very Poor">5</div>
-                </div>
-            </div>
-        </div>
-        ${pollutants.map(p => `
-            <div class="aq-card fade-in">
-                <div class="aq-label">${p.label}</div>
-                <div class="aq-value">${p.value}</div>
-                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">${p.unit}</div>
-                <div style="font-size: 13px; color: var(--text-primary); font-weight: 500;">${p.desc}</div>
-            </div>
-        `).join('')}
-    `;
+    // OpenWeather AQI: 1=Good, 2=Fair, 3=Moderate, 4=Poor, 5=Very Poor
+    const aqi = Math.min(5, Math.max(1, current.main.aqi || 1));
+
+    const aqiCategories = {
+        1: { name: 'Good', emoji: '✨', color: '#00ff00', bg: 'rgba(0, 255, 0, 0.1)', advice: '✓ Air quality is satisfactory. Enjoy outdoor activities!' },
+        2: { name: 'Fair', emoji: '👍', color: '#90ee90', bg: 'rgba(144, 238, 144, 0.1)', advice: '✓ Air quality is acceptable. No restrictions needed.' },
+        3: { name: 'Moderate', emoji: '⚠️', color: '#ffff00', bg: 'rgba(255, 255, 0, 0.1)', advice: '⚠️ Sensitive groups may experience effects. Limit outdoor activities.' },
+        4: { name: 'Poor', emoji: '😷', color: '#ff6600', bg: 'rgba(255, 102, 0, 0.1)', advice: '😷 Health alert! Consider wearing a mask outdoors.' },
+        5: { name: 'Very Poor', emoji: '🚨', color: '#ff0000', bg: 'rgba(255, 0, 0, 0.1)', advice: '🚨 Health alert! Avoid outdoors. Stay indoors.' }
+    };
+
+    const aqiInfo = aqiCategories[aqi] || aqiCategories[1];
+
+    // Build the air quality display using safe DOM methods
+    const container = document.createElement('div');
+    container.className = 'aq-card fade-in aq-main';
+    container.style.border = `2px solid ${aqiInfo.color}`;
+    container.style.background = aqiInfo.bg;
+    container.style.padding = '20px';
+    container.style.borderRadius = '15px';
+
+    // Create grid layout
+    const grid = document.createElement('div');
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = '1fr 2fr';
+    grid.style.gap = '20px';
+    grid.style.alignItems = 'start';
+
+    // Left side: AQI display
+    const leftCol = document.createElement('div');
+    leftCol.style.textAlign = 'center';
+
+    const aqiLabel = document.createElement('div');
+    aqiLabel.style.fontSize = '12px';
+    aqiLabel.style.color = 'var(--text-secondary)';
+    aqiLabel.style.marginBottom = '8px';
+    aqiLabel.style.textTransform = 'uppercase';
+    aqiLabel.textContent = 'AQI';
+    leftCol.appendChild(aqiLabel);
+
+    const aqiValue = document.createElement('div');
+    aqiValue.style.fontSize = '48px';
+    aqiValue.style.fontWeight = 'bold';
+    aqiValue.style.color = aqiInfo.color;
+    aqiValue.style.lineHeight = '1';
+    aqiValue.textContent = `${aqi}/5`;
+    leftCol.appendChild(aqiValue);
+
+    const aqiName = document.createElement('div');
+    aqiName.style.fontSize = '14px';
+    aqiName.style.color = aqiInfo.color;
+    aqiName.style.marginTop = '8px';
+    aqiName.style.fontWeight = '600';
+    aqiName.textContent = `${aqiInfo.name} ${aqiInfo.emoji}`;
+    leftCol.appendChild(aqiName);
+
+    // Right side: Details
+    const rightCol = document.createElement('div');
+
+    // Pollutants grid
+    const pollutantsGrid = document.createElement('div');
+    pollutantsGrid.style.display = 'grid';
+    pollutantsGrid.style.gridTemplateColumns = '1fr 1fr';
+    pollutantsGrid.style.gap = '12px';
+    pollutantsGrid.style.marginBottom = '16px';
+
+    // Helper to create pollutant card
+    const createPollutantCard = (label, value, unit, color) => {
+        const card = document.createElement('div');
+        card.style.background = 'rgba(0,212,255,0.1)';
+        card.style.padding = '12px';
+        card.style.borderRadius = '10px';
+        card.style.borderLeft = `3px solid ${color}`;
+        card.style.textAlign = 'center';
+
+        const cardLabel = document.createElement('div');
+        cardLabel.style.fontSize = '11px';
+        cardLabel.style.color = 'var(--text-secondary)';
+        cardLabel.style.marginBottom = '4px';
+        cardLabel.textContent = label;
+        card.appendChild(cardLabel);
+
+        const cardValue = document.createElement('div');
+        cardValue.style.fontSize = '18px';
+        cardValue.style.fontWeight = 'bold';
+        cardValue.style.color = color;
+        cardValue.textContent = String(value);
+        card.appendChild(cardValue);
+
+        const cardUnit = document.createElement('div');
+        cardUnit.style.fontSize = '10px';
+        cardUnit.style.color = 'var(--text-secondary)';
+        cardUnit.textContent = unit;
+        card.appendChild(cardUnit);
+
+        return card;
+    };
+
+    pollutantsGrid.appendChild(createPollutantCard('PM2.5', pm25, 'μg/m³', '#00d4ff'));
+    pollutantsGrid.appendChild(createPollutantCard('PM10', pm10, 'μg/m³', '#4ecdc4'));
+    pollutantsGrid.appendChild(createPollutantCard('NO₂', no2, 'μg/m³', '#74c0fc'));
+    pollutantsGrid.appendChild(createPollutantCard('O₃', o3, 'μg/m³', '#ffd700'));
+
+    rightCol.appendChild(pollutantsGrid);
+
+    // Health advice box
+    const adviceBox = document.createElement('div');
+    adviceBox.style.background = `rgba(${aqiInfo.color === '#ff0000' ? '255, 0, 0' : aqiInfo.color === '#ff6600' ? '255, 102, 0' : '116, 192, 252'}, 0.15)`;
+    adviceBox.style.padding = '12px';
+    adviceBox.style.borderRadius = '10px';
+    adviceBox.style.borderLeft = `3px solid ${aqiInfo.color}`;
+
+    const adviceText = document.createElement('div');
+    adviceText.style.fontSize = '12px';
+    adviceText.style.color = 'var(--text-primary)';
+    adviceText.style.fontWeight = '600';
+    adviceText.style.lineHeight = '1.6';
+    adviceText.textContent = aqiInfo.advice;
+    adviceBox.appendChild(adviceText);
+
+    rightCol.appendChild(adviceBox);
+
+    grid.appendChild(leftCol);
+    grid.appendChild(rightCol);
+    container.appendChild(grid);
+
+    // Clear and append
+    elements.airQuality.innerHTML = '';
+    elements.airQuality.appendChild(container);
 }
 
 // Update Charts
@@ -603,9 +822,12 @@ function updateTemperatureChart(data) {
     const ctx = document.getElementById('temperatureChart');
     if (!ctx) return;
 
+    // Fix: Format time labels with HH:MM format and avoid showing duplicate "5:00"
     const labels = data.map(item => {
         const date = new Date(item.dt * 1000);
-        return date.getHours() + ':00';
+        const hour = date.getHours().toString().padStart(2, '0');
+        const minute = date.getMinutes().toString().padStart(2, '0');
+        return `${hour}:${minute}`;
     });
 
     const temps = data.map(item => Math.round(item.main.temp));
@@ -699,13 +921,19 @@ function updateHumidityChart(data) {
     const ctx = document.getElementById('humidityChart');
     if (!ctx) return;
 
+    // Fix: Format time labels with HH:MM format
     const labels = data.map(item => {
         const date = new Date(item.dt * 1000);
-        return date.getHours() + ':00';
+        const hour = date.getHours().toString().padStart(2, '0');
+        const minute = date.getMinutes().toString().padStart(2, '0');
+        return `${hour}:${minute}`;
     });
 
     const humidity = data.map(item => item.main.humidity);
-    const precipitation = data.map(item => (item.rain ? item.rain['3h'] : 0));
+    const precipitation = data.map(item => {
+        if (!item.rain) return 0;
+        return typeof item.rain === 'object' ? (item.rain['3h'] || 0) : item.rain;
+    });
 
     if (state.chartInstances.humidity) {
         state.chartInstances.humidity.destroy();
@@ -798,10 +1026,12 @@ function updateHumidityChart(data) {
     });
 }
 
-// Load Default Location (New York)
+// Load Default Location (Delhi)
 async function loadDefaultLocation() {
     try {
-        await fetchWeatherData(40.7128, -74.0060); // New York coordinates
+        // Delhi coordinates
+        state.currentLocation = { lat: 28.7041, lon: 77.1025, name: 'Delhi', country: 'India' };
+        await fetchWeatherData(28.7041, 77.1025);
     } catch (error) {
         console.error('Failed to load default location:', error);
     }
@@ -820,23 +1050,28 @@ function updateLastUpdated() {
 // Day/Night Monitoring
 let dayNightMonitoringInterval = null;
 
+// Check if it's daytime
+function isDayTime(sunrise, sunset) {
+    const now = new Date().getTime() / 1000; // Current time in seconds
+    return now >= sunrise && now < sunset;
+}
+
 function startDayNightMonitoring() {
     // Clear any existing interval
     if (dayNightMonitoringInterval) {
         clearInterval(dayNightMonitoringInterval);
     }
     
-    // Check for day/night transition every minute (only if not forced)
+    // Check for day/night transition every minute
     dayNightMonitoringInterval = setInterval(() => {
-        if (state.sunrise && state.sunset && state.currentTheme === 'auto' && !state.forceTimeOfDay) {
-            const currentTimeOfDay = themeManager.getCurrentTimeOfDay(state.sunrise, state.sunset);
+        if (state.sunrise && state.sunset && state.currentLocation) {
+            const isDay = isDayTime(state.sunrise, state.sunset);
+            const currentTheme = isDay ? THEMES.DAY : THEMES.NIGHT;
             
             // If the time of day has changed, update the theme
-            if (currentTimeOfDay !== state.currentTimeOfDay) {
-                const seasonTheme = themeManager.getAutoTheme(state.currentLocation.lat);
-                themeManager.applyTheme(seasonTheme, currentTimeOfDay);
-                state.currentTimeOfDay = currentTimeOfDay;
-                showNotification(`Switched to ${currentTimeOfDay} theme ✨`);
+            if (currentTheme !== state.currentTheme) {
+                themeManager.applyTheme(currentTheme);
+                showNotification(`Switched to ${currentTheme} mode ✨`);
             }
         }
     }, 60000); // Check every minute
