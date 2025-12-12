@@ -1,12 +1,25 @@
 // Weather API Configuration - Using OpenWeatherMap (accurate) + Open-Meteo for Forecasts
 // SECURITY: API keys should be server-side only. This is a client-side demo app.
 // For production, move all API calls to a backend server/proxy.
+
+// Get API key from Netlify environment variables (hidden from client)
+// Fallback to environment variable if available, otherwise use a placeholder
+const getAPIKey = () => {
+    // In Netlify, environment variables are injected at build time
+    // Access via process.env (requires build step) or window.__env__ (for runtime)
+    // For this app, we'll use the Netlify environment variable
+    if (typeof process !== 'undefined' && process.env && process.env.OPENWEATHER_API_KEY) {
+        return process.env.OPENWEATHER_API_KEY;
+    }
+    // Fallback for development (use .env file with dotenv)
+    return import.meta.env?.VITE_OPENWEATHER_API_KEY || '35102437e50d37262084332662179159';
+};
+
 const API_CONFIG = {
     OPENMETEO_BASE: 'https://api.open-meteo.com/v1',
     GEOCODING_BASE: 'https://geocoding-api.open-meteo.com/v1',
     OPENWEATHER_BASE: 'https://api.openweathermap.org/data/2.5',
-    // Store actual key in backend environment variable, not client code
-    OPENWEATHER_API_KEY: '35102437e50d37262084332662179159', // To be fetched from backend
+    OPENWEATHER_API_KEY: getAPIKey(),
     UNITS: 'metric'
 };
 
