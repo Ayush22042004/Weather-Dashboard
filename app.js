@@ -2,25 +2,10 @@
 // SECURITY: API keys should be server-side only. This is a client-side demo app.
 // For production, move all API calls to a backend server/proxy.
 
-// Get API key from environment or use fallback for local dev
+// Get API key - no longer needed, using server-side proxy instead
 const getAPIKey = () => {
-    // Priority 1: Check window.__ENV__ (loaded from .env file locally)
-    if (typeof window !== 'undefined' && window.__ENV__ && window.__ENV__.VITE_OPENWEATHER_API_KEY) {
-        return window.__ENV__.VITE_OPENWEATHER_API_KEY;
-    }
-    
-    // Priority 2: Check window.__netlify environment object (Netlify function/variable)
-    if (typeof window !== 'undefined' && window.__netlify && window.__netlify.OPENWEATHER_API_KEY) {
-        return window.__netlify.OPENWEATHER_API_KEY;
-    }
-    
-    // Priority 3: Netlify environment variables (injected at build/runtime)
-    if (typeof process !== 'undefined' && process.env && process.env.OPENWEATHER_API_KEY) {
-        return process.env.OPENWEATHER_API_KEY;
-    }
-    
-    // No API key found
-    console.error('❌ API Key not found. Please add OPENWEATHER_API_KEY to Netlify environment variables.');
+    // API key is now handled server-side via Netlify Functions
+    // No need to expose it to client
     return '';
 };
 
@@ -281,8 +266,10 @@ async function handleLocationClick() {
                     let countryCode = '';
                     
                     try {
-                        // Use Open-Meteo reverse geocoding (free, no key required)
-                        const response = await fetch(`${API_CONFIG.GEOCODING_BASE}/reverse?latitude=${latitude}&longitude=${longitude}&language=en`);
+                        // Use proxy for reverse geocoding to avoid CORS issues
+                        const reverseGeoUrl = `/.netlify/functions/inject-env?lat=${latitude}&lon=${longitude}&type=reverse_geocoding`;
+                        
+                        const response = await fetch(reverseGeoUrl);
                         
                         if (response.ok) {
                             const data = await response.json();
@@ -307,7 +294,7 @@ async function handleLocationClick() {
                             console.warn('Reverse geocode returned status:', response.status);
                         }
                     } catch (geoError) {
-                        console.warn('Reverse geocoding failed:', geoError.message);
+                        console.warn('Reverse geocoding failed (this is normal in local development):', geoError.message);
                         // Fallback: if API is not available, still work with coordinates
                     }
                     
@@ -378,8 +365,23 @@ async function fetchWeatherData(lat, lon) {
     try {
         showLoadingSpinner(true);
 
-        // Fetch current weather from OpenWeatherMap
-        const currentUrl = `${API_CONFIG.OPENWEATHER_BASE}/weather?lat=${lat}&lon=${lon}&units=${API_CONFIG.UNITS}&appid=${API_CONFIG.OPENWEATHER_API_KEY}`;
+        // Helper to determine if running on Netlify or localhost
+        const isProduction = location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
+        const proxyPath = isProduction ? '/.netlify/functions/inject-env' : '';
+
+        // Fetch current weather - use proxy on production, direct API on localhost
+        let currentUrl;
+        if (isProduction) {
+            currentUrl = `${proxyPath}?lat=${lat}&lon=${lon}&type=weather`;
+        } else {
+            // For localhost, use direct API call with key from .env
+            const apiKey = window.__ENV__?.VITE_OPENWEATHER_API_KEY || '';
+            if (!apiKey) {
+                throw new Error('API key not found in .env file');
+            }
+            currentUrl = `${API_CONFIG.OPENWEATHER_BASE}/weather?lat=${lat}&lon=${lon}&units=${API_CONFIG.UNITS}&appid=${apiKey}`;
+        }
+        
         const currentResponse = await fetch(currentUrl);
         if (!currentResponse.ok) {
             throw new Error(`Current weather API error: ${currentResponse.status}`);
@@ -394,8 +396,15 @@ async function fetchWeatherData(lat, lon) {
         }
         const forecastData = await forecastResponse.json();
 
-        // Fetch air quality from OpenWeatherMap
-        const aqUrl = `${API_CONFIG.OPENWEATHER_BASE}/air_pollution?lat=${lat}&lon=${lon}&appid=${API_CONFIG.OPENWEATHER_API_KEY}`;
+        // Fetch air quality - use proxy on production, direct API on localhost
+        let aqUrl;
+        if (isProduction) {
+            aqUrl = `${proxyPath}?lat=${lat}&lon=${lon}&type=air_pollution`;
+        } else {
+            const apiKey = window.__ENV__?.VITE_OPENWEATHER_API_KEY || '';
+            aqUrl = `${API_CONFIG.OPENWEATHER_BASE}/air_pollution?lat=${lat}&lon=${lon}&appid=${apiKey}`;
+        }
+        
         const aqResponse = await fetch(aqUrl);
         const aqData = aqResponse.ok ? await aqResponse.json() : null;
 

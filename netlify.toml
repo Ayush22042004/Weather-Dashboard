@@ -1,6 +1,7 @@
 [build]
   command = ""
   publish = "."
+  functions = "netlify/functions"
 
 [[redirects]]
   from = "/*"
@@ -9,6 +10,13 @@
 
 [context.production.environment]
   CACHE_URL = "some_id"
+  OPENWEATHER_API_KEY = "35102437e50d37262084332662179159"
+
+[context.deploy-preview.environment]
+  OPENWEATHER_API_KEY = "35102437e50d37262084332662179159"
+
+[context.branch-deploy.environment]
+  OPENWEATHER_API_KEY = "35102437e50d37262084332662179159"
 
 [[headers]]
   for = "/*"

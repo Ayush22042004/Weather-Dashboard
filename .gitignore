@@ -30,3 +30,6 @@ build/
 # Misc
 .cache/
 .tmp/
+
+# Local Netlify folder
+.netlify
